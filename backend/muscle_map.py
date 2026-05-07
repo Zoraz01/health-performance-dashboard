@@ -90,7 +90,6 @@ def get_muscle_groups(exercise_template_id: str, conn) -> dict:
     Falls back to {"primary": "unknown", "secondary": []} if id not found.
     conn must be a sqlite3.Connection (from database.get_sqlite()).
     """
-    import json as _json
     row = conn.execute(
         "SELECT primary_muscle_group, secondary_muscle_groups, type "
         "FROM exercise_templates WHERE id = ?",
@@ -100,7 +99,7 @@ def get_muscle_groups(exercise_template_id: str, conn) -> dict:
         log.warning("exercise_template_id not found in DB: %s", exercise_template_id)
         return {"primary": "unknown", "secondary": [], "type": "weight_reps"}
     try:
-        secondary = _json.loads(row["secondary_muscle_groups"] or "[]")
+        secondary = json.loads(row["secondary_muscle_groups"] or "[]")
     except (ValueError, TypeError):
         secondary = []
     return {
@@ -112,12 +111,15 @@ def get_muscle_groups(exercise_template_id: str, conn) -> dict:
 
 def log_unmapped_full_body(title: str) -> None:
     """Append unmapped full_body exercise titles to a log for later review."""
-    log_dir = os.path.join(os.path.dirname(__file__), "test_logs")
-    os.makedirs(log_dir, exist_ok=True)
-    path = os.path.join(log_dir, "unmapped_full_body.txt")
-    with open(path, "a") as f:
-        f.write(f"{datetime.now().isoformat()} — {title}\n")
     log.warning("full_body exercise not in FULL_BODY_SPLITS, skipping volume: %s", title)
+    try:
+        log_dir = os.path.join(os.path.dirname(__file__), "test_logs")
+        os.makedirs(log_dir, exist_ok=True)
+        path = os.path.join(log_dir, "unmapped_full_body.txt")
+        with open(path, "a") as f:
+            f.write(f"{datetime.now().isoformat()} — {title}\n")
+    except OSError as e:
+        log.warning("could not write unmapped_full_body log: %s", e)
 
 
 def compute_exercise_volume(
@@ -151,7 +153,7 @@ def compute_exercise_volume(
         weight   = s.get("weight_kg")
         duration = s.get("duration_seconds")
 
-        if ex_type == "duration" and duration:
+        if ex_type == "duration" and duration is not None:
             raw_volume += duration / 60.0
         elif weight is not None:
             raw_volume += reps * weight

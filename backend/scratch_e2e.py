@@ -9,6 +9,7 @@ via database.py --smoke. This test verifies each write path end-to-end.
 Run from backend/: python3.14 scratch_e2e.py
 """
 import asyncio
+import glob
 import json
 import logging
 
@@ -18,12 +19,19 @@ from database import init_db, upsert_snapshot_hevy, get_snapshot, get_sqlite
 from apple_health import ingest_metrics, ingest_workouts, _detect_latest_date
 from muscle_map import aggregate_daily_volume, get_muscle_groups
 
+def _latest(pattern: str) -> str:
+    matches = sorted(glob.glob(f"test_logs/{pattern}"))
+    if not matches:
+        raise FileNotFoundError(f"No files matching test_logs/{pattern}")
+    return matches[-1]
+
+
 async def main():
     init_db()
 
     # --- Apple Health metrics ---
     print("\n=== Apple Health metrics ===")
-    with open("test_logs/apple_health_20260506_232444.json") as f:
+    with open(_latest("apple_health_2*.json")) as f:
         m_payload = json.load(f)
 
     ah_date = _detect_latest_date(m_payload)
@@ -42,7 +50,7 @@ async def main():
 
     # --- Apple Health workouts ---
     print("\n=== Apple Health workouts ===")
-    with open("test_logs/apple_health_workouts_20260506_232521.json") as f:
+    with open(_latest("apple_health_workouts_*.json")) as f:
         w_payload = json.load(f)
 
     # auto-detect date from first workout
@@ -56,15 +64,23 @@ async def main():
     print(f"Workouts column OK — {len(snap['workouts'])} entries")
 
     # --- Hevy workouts ---
-    print("\n=== Hevy workouts (2026-05-03) ===")
-    hevy_date = "2026-05-03"
-    with open("test_logs/hevy_workouts_20260507_000407.json") as f:
-        hevy_workouts_raw = json.load(f)
+    hevy_path = _latest("hevy_workouts_*.json")
+    with open(hevy_path) as f:
+        hevy_workouts_raw: list[dict] = json.load(f)
 
-    # Filter to hevy_date and enrich with muscle groups from DB
+    # Auto-detect the most recent date across all workouts in the file
     from zoneinfo import ZoneInfo
     from datetime import datetime
     LOCAL_TZ = ZoneInfo("America/Toronto")
+
+    all_dates = sorted({
+        datetime.fromisoformat(w["start_time"].replace("Z", "+00:00"))
+        .astimezone(LOCAL_TZ).date().isoformat()
+        for w in hevy_workouts_raw if w.get("start_time")
+    })
+    hevy_date = all_dates[-1] if all_dates else None
+    assert hevy_date, "No workout dates found in hevy file"
+    print(f"\n=== Hevy workouts ({hevy_date}) ===")
 
     hevy_workouts = []
     with get_sqlite() as conn:

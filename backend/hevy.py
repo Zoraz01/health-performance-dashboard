@@ -1,35 +1,60 @@
-import os
-import json
-import httpx
 import asyncio
+import json
+import logging
+import os
 from datetime import datetime, timedelta, timezone
+
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+log = logging.getLogger(__name__)
+
 HEVY_API_KEY = os.getenv("HEVY_API_KEY")
+if not HEVY_API_KEY:
+    raise RuntimeError("HEVY_API_KEY not set — check backend/.env")
+
 HEVY_BASE_URL = "https://api.hevyapp.com"
 PAGE_SIZE = 10
 TEMPLATE_PAGE_SIZE = 100
 
 
+async def _get_json(client: httpx.AsyncClient, url: str, **kwargs) -> dict:
+    """GET with up to 3 attempts on 5xx responses."""
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            resp = await client.get(url, **kwargs)
+            if resp.status_code < 500:
+                resp.raise_for_status()
+                return resp.json()
+            last_exc = httpx.HTTPStatusError(
+                f"server error {resp.status_code}", request=resp.request, response=resp
+            )
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as e:
+            last_exc = e
+        wait = 2 ** attempt
+        log.warning("Hevy API transient error on %s (attempt %d/3), retrying in %ds", url, attempt + 1, wait)
+        await asyncio.sleep(wait)
+    raise last_exc  # type: ignore[misc]
+
+
 async def fetch_exercise_templates() -> dict[str, dict]:
-    """
-    Returns all exercise templates keyed by id.
-    Each value: {title, primary_muscle_group, secondary_muscle_groups, type}
-    """
+    """Returns all exercise templates keyed by id."""
     templates = {}
     page = 1
 
     async with httpx.AsyncClient(base_url=HEVY_BASE_URL, timeout=30) as client:
         while True:
-            resp = await client.get(
+            data = await _get_json(
+                client,
                 "/v1/exercise_templates",
                 headers={"api-key": HEVY_API_KEY},
                 params={"page": page, "pageSize": TEMPLATE_PAGE_SIZE},
             )
-            resp.raise_for_status()
-            data = resp.json()
 
             for t in data["exercise_templates"]:
                 templates[t["id"]] = {
@@ -48,18 +73,14 @@ async def fetch_exercise_templates() -> dict[str, dict]:
 
 
 async def fetch_latest_body_weight() -> float | None:
-    """
-    Returns the most recent body weight in kg, or None if no measurements exist.
-    Used as the weight multiplier for bodyweight exercises (weight_kg: null).
-    """
+    """Returns the most recent body weight in kg, or None if no measurements exist."""
     async with httpx.AsyncClient(base_url=HEVY_BASE_URL, timeout=30) as client:
-        resp = await client.get(
+        data = await _get_json(
+            client,
             "/v1/body_measurements",
             headers={"api-key": HEVY_API_KEY},
             params={"page": 1, "pageSize": 10},
         )
-        resp.raise_for_status()
-        data = resp.json()
         measurements = data.get("body_measurements", [])
         if not measurements:
             return None
@@ -81,13 +102,12 @@ async def fetch_workouts_since(since: datetime | None = None) -> list[dict]:
 
     async with httpx.AsyncClient(base_url=HEVY_BASE_URL, timeout=30) as client:
         while True:
-            resp = await client.get(
+            data = await _get_json(
+                client,
                 "/v1/workouts",
                 headers={"api-key": HEVY_API_KEY},
                 params={"page": page, "pageSize": PAGE_SIZE},
             )
-            resp.raise_for_status()
-            data = resp.json()
 
             batch = data["workouts"]
             if not batch:
@@ -98,6 +118,7 @@ async def fetch_workouts_since(since: datetime | None = None) -> list[dict]:
                     workout["start_time"].replace("Z", "+00:00")
                 )
                 if start < since:
+                    log.debug("pagination cutoff reached at %s — stopping early", start.date())
                     return workouts
                 workouts.append(workout)
 
@@ -149,7 +170,6 @@ async def _test():
             secondary = t.get("secondary_muscle_groups", [])
             sets = ex.get("sets", [])
 
-            # Compute volume: use weight_kg if present, body weight for bodyweight exercises
             total_volume = 0.0
             for s in sets:
                 reps = s.get("reps") or 0
@@ -178,4 +198,5 @@ async def _test():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(message)s")
     asyncio.run(_test())

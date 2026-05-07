@@ -77,9 +77,7 @@ export default function App() {
             )}
 
             {activeTab === 'Check-in' && (
-              <div className="bg-slate-800 rounded-xl p-6 text-slate-400 text-sm">
-                Soreness check-in for today will appear here.
-              </div>
+              <SorenessCheckIn />
             )}
 
           </div>

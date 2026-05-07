@@ -83,7 +83,7 @@ def aggregate_metric(
         return sum((_val(e) or 0.0) for e in todays)
 
     if method == "mean":
-        vals = [_val(e) for e in todays if _val(e) is not None]
+        vals = [v for e in todays if (v := _val(e)) is not None]
         return mean(vals) if vals else None
 
     if method == "last":
@@ -174,24 +174,24 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
 
 
 def ingest_metrics(payload: dict, target_date: str) -> dict:
-    """Parse metrics payload, write to DB, append raw blob. Returns extracted fields."""
+    """Parse metrics payload, append raw blob, then write to DB. Returns extracted fields."""
     import database
     fields = parse_metrics_payload(payload, target_date)
     log.info("[apple_health] metrics for %s: %d fields extracted", target_date, len(fields))
-    complete = database.upsert_snapshot_apple_health(target_date, fields)
     database.append_raw_blob("raw_apple_health", target_date, payload)
+    complete = database.upsert_snapshot_apple_health(target_date, fields)
     if complete:
         log.info("[apple_health] snapshot complete for %s — Claude can run", target_date)
     return fields
 
 
 def ingest_workouts(payload: dict, target_date: str) -> list[dict]:
-    """Parse workouts payload, merge into DB workouts column, append raw blob."""
+    """Parse workouts payload, append raw blob, then merge into DB workouts column."""
     import database
     workouts = parse_workouts_payload(payload, target_date)
     log.info("[apple_health] workouts for %s: %d entries", target_date, len(workouts))
-    database.upsert_snapshot_apple_health_workouts(target_date, workouts)
     database.append_raw_blob("raw_apple_health_workouts", target_date, payload)
+    database.upsert_snapshot_apple_health_workouts(target_date, workouts)
     return workouts
 
 
@@ -260,14 +260,17 @@ if __name__ == "__main__":
         with open(path) as f:
             w_payload = json.load(f)
 
-        # Auto-detect date from the workouts payload
+        # Auto-detect the most recent date across all workouts in the payload
         raw_wkts = w_payload.get("data", {}).get("workouts") or []
         wkt_date = None
-        if raw_wkts and raw_wkts[0].get("start"):
-            try:
-                wkt_date = _local_date(raw_wkts[0]["start"])
-            except ValueError:
-                pass
+        for wkt in raw_wkts:
+            if wkt.get("start"):
+                try:
+                    d = _local_date(wkt["start"])
+                    if wkt_date is None or d > wkt_date:
+                        wkt_date = d
+                except ValueError:
+                    pass
         wkt_date = wkt_date or (sys.argv[1] if len(sys.argv) > 1 else None)
 
         if wkt_date:

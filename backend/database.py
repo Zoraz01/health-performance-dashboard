@@ -44,39 +44,33 @@ HEVY_COLUMNS = ("body_weight_kg", "muscle_volume", "workouts")
 # Schema DDL
 # ---------------------------------------------------------------------------
 
-_DUCKDB_DDL = """
-CREATE SEQUENCE IF NOT EXISTS seq_raw_apple_health;
-CREATE SEQUENCE IF NOT EXISTS seq_raw_apple_health_workouts;
-CREATE SEQUENCE IF NOT EXISTS seq_raw_hevy_workouts;
-
-CREATE TABLE IF NOT EXISTS raw_apple_health (
+# Explicit list — avoids silent statement drops from split(";") on unterminated stmts.
+_DUCKDB_DDL_STATEMENTS: list[str] = [
+    "CREATE SEQUENCE IF NOT EXISTS seq_raw_apple_health",
+    "CREATE SEQUENCE IF NOT EXISTS seq_raw_apple_health_workouts",
+    "CREATE SEQUENCE IF NOT EXISTS seq_raw_hevy_workouts",
+    """CREATE TABLE IF NOT EXISTS raw_apple_health (
     id          BIGINT PRIMARY KEY DEFAULT nextval('seq_raw_apple_health'),
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     date        DATE NOT NULL,
     payload     JSON NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS raw_apple_health_workouts (
+)""",
+    """CREATE TABLE IF NOT EXISTS raw_apple_health_workouts (
     id          BIGINT PRIMARY KEY DEFAULT nextval('seq_raw_apple_health_workouts'),
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     date        DATE NOT NULL,
     payload     JSON NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS raw_hevy_workouts (
+)""",
+    """CREATE TABLE IF NOT EXISTS raw_hevy_workouts (
     id          BIGINT PRIMARY KEY DEFAULT nextval('seq_raw_hevy_workouts'),
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     date        DATE NOT NULL,
     payload     JSON NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_raw_apple_health_date
-    ON raw_apple_health(date);
-CREATE INDEX IF NOT EXISTS idx_raw_apple_health_workouts_date
-    ON raw_apple_health_workouts(date);
-CREATE INDEX IF NOT EXISTS idx_raw_hevy_workouts_date
-    ON raw_hevy_workouts(date);
-"""
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_raw_apple_health_date ON raw_apple_health(date)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_apple_health_workouts_date ON raw_apple_health_workouts(date)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_hevy_workouts_date ON raw_hevy_workouts(date)",
+]
 
 _SQLITE_DDL = """
 PRAGMA journal_mode = WAL;
@@ -110,17 +104,19 @@ CREATE TABLE IF NOT EXISTS daily_snapshot (
     sleep_deep_min      REAL,
     sleep_rem_min       REAL,
     sleep_awake_min     REAL,
-    muscle_volume       TEXT,
-    workouts            TEXT,
+    muscle_volume       TEXT CHECK (muscle_volume IS NULL OR json_valid(muscle_volume)),
+    workouts            TEXT CHECK (workouts IS NULL OR json_valid(workouts)),
     apple_health_at     TIMESTAMP,
     hevy_at             TIMESTAMP,
     snapshot_complete   INTEGER NOT NULL DEFAULT 0,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- WHEN guard prevents the trigger from firing on its own updated_at write (avoids recursion).
 CREATE TRIGGER IF NOT EXISTS daily_snapshot_touch
 AFTER UPDATE ON daily_snapshot
 FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
 BEGIN
     UPDATE daily_snapshot SET updated_at = CURRENT_TIMESTAMP WHERE date = OLD.date;
 END;
@@ -160,6 +156,8 @@ CREATE TABLE IF NOT EXISTS medications (
     started_date TEXT,
     stopped_date TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_medications_active ON medications(active);
 """
 
 # ---------------------------------------------------------------------------
@@ -204,10 +202,8 @@ def init_db() -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
 
     with get_duckdb() as con:
-        for stmt in _DUCKDB_DDL.split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                con.execute(stmt)
+        for stmt in _DUCKDB_DDL_STATEMENTS:
+            con.execute(stmt)
         log.info("DuckDB schema ready: %s", DUCKDB_PATH)
 
     with get_sqlite() as conn:
@@ -283,18 +279,18 @@ def replace_workouts_for_source(
 def _maybe_complete(conn: sqlite3.Connection, date: str) -> bool:
     """Set snapshot_complete=1 if both apple_health_at and hevy_at are set.
 
+    Single atomic UPDATE — avoids the SELECT+UPDATE TOCTOU race.
     Returns True only on the 0→1 transition so callers can queue Claude.
     """
-    row = conn.execute(
-        "SELECT apple_health_at, hevy_at, snapshot_complete "
-        "FROM daily_snapshot WHERE date = ?",
+    cursor = conn.execute(
+        "UPDATE daily_snapshot SET snapshot_complete = 1 "
+        "WHERE date = ? "
+        "  AND apple_health_at IS NOT NULL "
+        "  AND hevy_at IS NOT NULL "
+        "  AND snapshot_complete = 0",
         (date,),
-    ).fetchone()
-    if row and row["apple_health_at"] and row["hevy_at"] and not row["snapshot_complete"]:
-        conn.execute(
-            "UPDATE daily_snapshot SET snapshot_complete = 1 WHERE date = ?",
-            (date,),
-        )
+    )
+    if cursor.rowcount == 1:
         log.info("snapshot complete for %s — ready for Claude", date)
         return True
     return False
@@ -347,6 +343,9 @@ def upsert_snapshot_hevy(
     body_weight_kg only overwrites if the column is currently NULL —
     Hevy is authoritative, Apple Health body_mass is the fallback.
     Returns True if this write completed the snapshot (triggers Claude).
+
+    Both writes (metrics + workouts) run inside a single transaction so a
+    crash between them cannot leave the snapshot row in a partial state.
     """
     sql = """
         INSERT INTO daily_snapshot
@@ -358,14 +357,21 @@ def upsert_snapshot_hevy(
             hevy_at        = excluded.hevy_at
     """
     with get_sqlite() as conn:
-        conn.execute(sql, (
-            date,
-            body_weight_kg,
-            json.dumps(muscle_volume) if muscle_volume is not None else None,
-            _now_iso(),
-        ))
-        replace_workouts_for_source(conn, date, "hevy", workouts)
-        return _maybe_complete(conn, date)
+        conn.execute("BEGIN")
+        try:
+            conn.execute(sql, (
+                date,
+                body_weight_kg,
+                json.dumps(muscle_volume) if muscle_volume is not None else None,
+                _now_iso(),
+            ))
+            replace_workouts_for_source(conn, date, "hevy", workouts)
+            result = _maybe_complete(conn, date)
+            conn.execute("COMMIT")
+            return result
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -373,18 +379,12 @@ def upsert_snapshot_hevy(
 # ---------------------------------------------------------------------------
 
 def upsert_claude_response(date: str, parsed: dict, raw: str) -> None:
-    """Write Claude's structured response for date. Idempotent — never overwrites
-    a row that already has a valid score_overall."""
-    existing = None
-    with get_sqlite() as conn:
-        existing = conn.execute(
-            "SELECT score_overall FROM claude_responses WHERE date = ?", (date,)
-        ).fetchone()
+    """Write Claude's structured response for date.
 
-    if existing and existing["score_overall"] is not None:
-        log.info("claude_responses already populated for %s — skipping", date)
-        return
-
+    Idempotent — the ON CONFLICT WHERE clause prevents overwriting a row
+    that already has a valid score_overall, atomically and without a
+    separate SELECT round-trip.
+    """
     scores = parsed.get("scores", {})
     sql = """
         INSERT INTO claude_responses
@@ -403,9 +403,10 @@ def upsert_claude_response(date: str, parsed: dict, raw: str) -> None:
             callout           = excluded.callout,
             muscle_fatigue    = excluded.muscle_fatigue,
             raw_response      = excluded.raw_response
+        WHERE claude_responses.score_overall IS NULL
     """
     with get_sqlite() as conn:
-        conn.execute(sql, (
+        cursor = conn.execute(sql, (
             date,
             scores.get("overall"),
             scores.get("training_quality"),
@@ -418,7 +419,10 @@ def upsert_claude_response(date: str, parsed: dict, raw: str) -> None:
             json.dumps(parsed.get("muscle_fatigue")) if parsed.get("muscle_fatigue") is not None else None,
             raw,
         ))
-    log.info("claude_responses written for %s", date)
+    if cursor.rowcount == 0:
+        log.info("claude_responses already populated for %s — skipping", date)
+    else:
+        log.info("claude_responses written for %s", date)
 
 
 # ---------------------------------------------------------------------------
@@ -488,14 +492,19 @@ def get_score_history(days: int = 30) -> list[dict]:
             """
             SELECT date, score_overall, score_training, score_recovery,
                    score_balance, score_consistency
-            FROM claude_responses
-            WHERE score_overall IS NOT NULL
-            ORDER BY date DESC
-            LIMIT ?
+            FROM (
+                SELECT date, score_overall, score_training, score_recovery,
+                       score_balance, score_consistency
+                FROM claude_responses
+                WHERE score_overall IS NOT NULL
+                ORDER BY date DESC
+                LIMIT ?
+            )
+            ORDER BY date ASC
             """,
             (days,),
         ).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    return [dict(r) for r in rows]
 
 
 def get_exercise_template(template_id: str) -> dict | None:
@@ -539,7 +548,8 @@ if __name__ == "__main__":
 
     if "--smoke" in sys.argv:
         print("\nRunning smoke write...")
-        date = "2026-05-07"
+        # Sentinel date — never conflicts with real health data.
+        date = "1970-01-01"
 
         ok = upsert_snapshot_apple_health(date, {
             "steps": 10000, "active_calories": 500.0, "resting_hr": 58,
