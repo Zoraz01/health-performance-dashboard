@@ -1,10 +1,15 @@
+import hmac
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Header
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,13 +23,13 @@ log = logging.getLogger(__name__)
 
 app = FastAPI()
 
-APPLE_HEALTH_WEBHOOK_SECRET = "hd-apple-x7k2q9"
+APPLE_HEALTH_WEBHOOK_SECRET = os.environ["APPLE_HEALTH_WEBHOOK_SECRET"]
 LOG_DIR = Path(__file__).parent / "test_logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 
 def verify_bearer(authorization: Optional[str]):
-    if authorization != f"Bearer {APPLE_HEALTH_WEBHOOK_SECRET}":
+    if not authorization or not hmac.compare_digest(authorization, f"Bearer {APPLE_HEALTH_WEBHOOK_SECRET}"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 

@@ -1,1 +1,49 @@
+# Plans
 Plans/
+
+# Machine-specific launchd config
+launchd/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Health data — never commit (personal data + large files)
+backend/test_logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.Python
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
