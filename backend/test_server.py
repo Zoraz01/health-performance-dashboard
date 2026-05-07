@@ -62,14 +62,3 @@ async def apple_health_workouts(request: Request, authorization: Optional[str] =
         log.error(f"[apple_health_workouts] failed to process payload: {e}")
         raise HTTPException(status_code=500, detail="Processing error")
     return {"status": "ok"}
-
-
-@app.post("/webhook/hevy")
-async def hevy(request: Request):
-    try:
-        data = await request.json()
-        save("hevy", data)
-    except Exception as e:
-        log.error(f"[hevy] failed to process payload: {e}")
-        raise HTTPException(status_code=500, detail="Processing error")
-    return {"status": "ok"}
