@@ -160,6 +160,7 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
 
         out.append({
             "source":          "apple_health",
+            "id":              w.get("id"),
             "name":            w.get("name"),
             "start":           start,
             "end":             w.get("end"),
@@ -171,6 +172,52 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
             "intensity":       _qty(w, "intensity"),
         })
     return out
+
+
+def extract_hr_samples(workout: dict) -> list[dict]:
+    """
+    Merge heartRateData, activeEnergy, stepCount by timestamp into per-minute rows.
+
+    Apple Health gives each series as a list of {date, Avg/qty, Min, Max, units, source}.
+    Timestamps across series are aligned to the same 60-second buckets so we can
+    join on the date string directly.
+    """
+    by_ts: dict[str, dict] = {}
+
+    for entry in workout.get("heartRateData") or []:
+        ts = entry.get("date")
+        if not ts:
+            continue
+        by_ts.setdefault(ts, {}).update({
+            "hr_avg": entry.get("Avg"),
+            "hr_min": entry.get("Min"),
+            "hr_max": entry.get("Max"),
+        })
+
+    for entry in workout.get("activeEnergy") or []:
+        ts = entry.get("date")
+        if not ts:
+            continue
+        v = _val(entry)
+        if v is not None:
+            by_ts.setdefault(ts, {})["calories"] = v
+
+    for entry in workout.get("stepCount") or []:
+        ts = entry.get("date")
+        if not ts:
+            continue
+        v = _val(entry)
+        if v is not None:
+            by_ts.setdefault(ts, {})["steps"] = v
+
+    result = []
+    for ts_str, data in sorted(by_ts.items()):
+        try:
+            ts_iso = _parse_dt(ts_str).isoformat()
+        except ValueError:
+            continue
+        result.append({"ts": ts_iso, **data})
+    return result
 
 
 def ingest_metrics(payload: dict, target_date: str) -> dict:
@@ -186,12 +233,28 @@ def ingest_metrics(payload: dict, target_date: str) -> dict:
 
 
 def ingest_workouts(payload: dict, target_date: str) -> list[dict]:
-    """Parse workouts payload, append raw blob, then merge into DB workouts column."""
+    """Parse workouts payload, append raw blob, merge into DB, store HR timeseries."""
     import database
     workouts = parse_workouts_payload(payload, target_date)
     log.info("[apple_health] workouts for %s: %d entries", target_date, len(workouts))
     database.append_raw_blob("raw_apple_health_workouts", target_date, payload)
     database.upsert_snapshot_apple_health_workouts(target_date, workouts)
+
+    for raw_w in payload.get("data", {}).get("workouts") or []:
+        workout_id = raw_w.get("id")
+        start = raw_w.get("start")
+        if not workout_id or not start:
+            continue
+        try:
+            if _local_date(start) != target_date:
+                continue
+        except ValueError:
+            continue
+        samples = extract_hr_samples(raw_w)
+        if samples:
+            database.upsert_workout_hr_samples(workout_id, "apple_health", samples)
+            log.info("[apple_health] %d HR samples stored for workout %s", len(samples), workout_id)
+
     return workouts
 
 

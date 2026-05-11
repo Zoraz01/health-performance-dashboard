@@ -1,4 +1,148 @@
-// TODO: paste RecoveryMetrics from Claude.ai artifact
-export default function RecoveryMetrics() {
-  return <div className="bg-slate-800 rounded-xl p-4 text-slate-400">RecoveryMetrics — paste artifact here</div>
+const RECOVERY_FIXTURE = {
+  hrv_ms: 31.4,
+  hrv_avg: 38.2,
+  resting_hr: 86,
+  resting_hr_avg: 79,
+  cardio_recovery: 23.7,
+  cardio_recovery_avg: 26.5,
+  walking_hr_avg: 97,
+  walking_hr_baseline: 92,
+}
+
+function TrendArrow({ dir, className = '' }) {
+  return (
+    <svg viewBox="0 0 12 12" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      {dir === 'up' ? (
+        <><path d="M3 8L9 4" /><path d="M9 4H5.5" /><path d="M9 4V7" /></>
+      ) : (
+        <><path d="M3 4L9 8" /><path d="M9 8H5.5" /><path d="M9 8V5" /></>
+      )}
+    </svg>
+  )
+}
+
+function deriveStatus({ value, baseline, betterIsHigher, warnPct = 5, badPct = 12 }) {
+  const delta = ((value - baseline) / baseline) * 100
+  const signedDelta = betterIsHigher ? delta : -delta
+  if (signedDelta >= -warnPct) return { status: 'good', delta }
+  if (signedDelta >= -badPct) return { status: 'warn', delta }
+  return { status: 'bad', delta }
+}
+
+const STATUS_THEME = {
+  good: {
+    valueText: 'text-emerald-300',
+    pillBg: 'bg-emerald-500/12 text-emerald-300 ring-emerald-500/30',
+    label: 'On baseline',
+    dot: 'bg-emerald-400',
+  },
+  warn: {
+    valueText: 'text-amber-300',
+    pillBg: 'bg-amber-500/12 text-amber-300 ring-amber-500/30',
+    label: 'Below trend',
+    dot: 'bg-amber-400',
+  },
+  bad: {
+    valueText: 'text-red-300',
+    pillBg: 'bg-red-500/15 text-red-300 ring-red-500/40',
+    label: 'Recovery deficit',
+    dot: 'bg-red-400',
+  },
+}
+
+function MiniBar({ value, baseline, max, status }) {
+  const valuePct = Math.min(100, Math.max(4, (value / max) * 100))
+  const basePct = Math.min(100, (baseline / max) * 100)
+  const fill = { good: 'bg-emerald-400/80', warn: 'bg-amber-400/80', bad: 'bg-red-400/80' }[status]
+  return (
+    <div className="relative h-1 w-full bg-slate-800/80 rounded-full mt-3">
+      <div className={`absolute inset-y-0 left-0 ${fill} rounded-full transition-all duration-700`} style={{ width: `${valuePct}%` }} />
+      <div className="absolute -top-1 -bottom-1 w-px bg-slate-500" style={{ left: `${basePct}%` }} title={`30-day avg: ${baseline}`} />
+    </div>
+  )
+}
+
+function RecoveryCard({ name, value, unit, baseline, betterIsHigher, max, format = (v) => v }) {
+  if (value == null || baseline == null) return null
+  const { status, delta } = deriveStatus({ value, baseline, betterIsHigher })
+  const theme = STATUS_THEME[status]
+  const deltaSign = delta >= 0 ? '+' : ''
+  const arrowDir = delta >= 0 ? 'up' : 'down'
+  return (
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div>
+          <div className="text-[10.5px] uppercase tracking-[0.16em] text-slate-500 font-semibold">{name}</div>
+          <div className="text-slate-400 text-[10px] mt-0.5 font-mono">30-day avg {format(baseline)}{unit && ` ${unit}`}</div>
+        </div>
+        <span className={`inline-flex items-center gap-1 rounded-full ring-1 px-2 py-0.5 text-[10px] font-medium ${theme.pillBg}`}>
+          <TrendArrow dir={arrowDir} className="w-2.5 h-2.5" />
+          {deltaSign}{delta.toFixed(1)}%
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`text-3xl font-semibold tabular-nums tracking-tight ${theme.valueText}`}>{format(value)}</span>
+        <span className="text-slate-500 text-xs font-medium">{unit}</span>
+      </div>
+      <MiniBar value={value} baseline={baseline} max={max} status={status} />
+      <div className="flex items-center gap-1.5 mt-3">
+        <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
+        <span className="text-[11px] text-slate-400">{theme.label}</span>
+      </div>
+    </div>
+  )
+}
+
+const CARDS = [
+  { name: 'HRV',             valueKey: 'hrv_ms',        baseKey: 'hrv_avg',              unit: 'ms',  betterIsHigher: true,  max: 60,  format: v => v.toFixed(1) },
+  { name: 'Resting HR',      valueKey: 'resting_hr',    baseKey: 'resting_hr_avg',       unit: 'bpm', betterIsHigher: false, max: 120 },
+  { name: 'Cardio Recovery', valueKey: 'cardio_recovery',baseKey: 'cardio_recovery_avg', unit: 'bpm', betterIsHigher: false, max: 50,  format: v => v.toFixed(1) },
+  { name: 'Walking HR',      valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140 },
+]
+
+export default function RecoveryMetrics({ data = RECOVERY_FIXTURE }) {
+  const missing = CARDS.filter(c => data[c.valueKey] == null || data[c.baseKey] == null)
+    .map(c => c.name)
+  const hasAny = missing.length < CARDS.length
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-3 px-1">
+        <h3 className="text-slate-200 text-sm font-semibold">Recovery signals</h3>
+        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">vs 30-day baseline</span>
+      </div>
+
+      {hasAny ? (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            {CARDS.map(c => (
+              <RecoveryCard
+                key={c.name}
+                name={c.name}
+                value={data[c.valueKey]}
+                baseline={data[c.baseKey]}
+                unit={c.unit}
+                betterIsHigher={c.betterIsHigher}
+                max={c.max}
+                format={c.format}
+              />
+            ))}
+          </div>
+          {missing.length > 0 && (
+            <p className="text-[11px] text-slate-600 font-mono mt-2 px-1">
+              Waiting on Apple Health sync for: {missing.join(', ')}
+            </p>
+          )}
+        </>
+      ) : (
+        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 px-5 py-6 text-center">
+          <p className="text-slate-400 text-sm">Waiting for Apple Health to sync biometric data.</p>
+          <p className="text-slate-600 text-[11px] font-mono mt-1">
+            HRV, resting HR, cardio recovery, and walking HR come via the 4-hour webhook.
+            No 30-day minimum needed — baselines compute from whatever data exists.
+          </p>
+        </div>
+      )}
+    </section>
+  )
 }

@@ -1,6 +1,233 @@
 @import "tailwindcss";
 
+/* ── Pacific palette (dark default) ─────────────────────────────────────── */
+:root {
+  --s-50:   248 252 252;
+  --s-100:  232 244 246;
+  --s-200:  204 224 228;
+  --s-300:  168 196 202;
+  --s-400:  120 154 162;
+  --s-500:  84 122 132;
+  --s-600:  56 92 102;
+  --s-700:  34 68 78;
+  --s-800:  20 50 60;
+  --s-900:  12 36 44;
+  --s-950:  6 24 29;
+  --ok-300: 138 232 212;
+  --ok-400: 95 211 194;
+  --ok-500: 52 178 158;
+  --ok-600: 26 138 122;
+  --w-200:  253 220 138;
+  --w-300:  248 198 92;
+  --w-400:  238 172 60;
+  --w-500:  208 140 32;
+  --e-300:  248 152 142;
+  --e-400:  232 108 96;
+  --e-500:  208 76 64;
+  --e-600:  172 46 36;
+  --a1-300: 138 218 248;
+  --a1-400: 78 188 232;
+  --a2-300: 192 178 252;
+  --a2-400: 152 132 240;
+  --a3-300: 252 188 138;
+  --a3-400: 240 152 88;
+  --a4-300: 108 232 232;
+  --a4-400: 44 198 208;
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ── Bone palette (light mode) ───────────────────────────────────────────── */
+/* Inverted scale: 50 = darkest text, 950 = page bg (warm cream).           */
+/* Warm off-white background, mocha neutrals, muted sage greens.            */
+.light {
+  --s-50:   20 17 14;
+  --s-100:  26 22 18;
+  --s-200:  34 29 24;
+  --s-300:  60 52 44;
+  --s-400:  120 108 95;
+  --s-500:  165 153 138;
+  --s-600:  200 188 172;
+  --s-700:  224 213 198;
+  --s-800:  208 194 174;
+  --s-900:  222 210 192;
+  --s-950:  234 224 208;
+  --ok-300: 163 196 110;
+  --ok-400: 140 178 78;
+  --ok-500: 108 145 55;
+  --ok-600: 82 112 38;
+  --w-200:  236 198 122;
+  --w-300:  224 178 90;
+  --w-400:  204 152 60;
+  --w-500:  176 126 38;
+  --e-300:  212 130 110;
+  --e-400:  188 86 60;
+  --e-500:  163 64 46;
+  --e-600:  130 44 30;
+  --a1-300: 168 192 200;
+  --a1-400: 120 158 172;
+  --a2-300: 200 162 180;
+  --a2-400: 164 118 142;
+  --a3-300: 224 154 100;
+  --a3-400: 196 122 64;
+  --a4-300: 140 184 168;
+  --a4-400: 94 152 130;
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ── Tailwind v4 theme overrides ─────────────────────────────────────────── */
+/* Map Tailwind's color tokens to our CSS variables so every utility class   */
+/* (bg-slate-900, text-emerald-400, etc.) re-themes with no markup changes.  */
+@theme inline {
+  /* Fonts */
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
+
+  /* Slate / neutrals */
+  --color-slate-50:  rgb(var(--s-50));
+  --color-slate-100: rgb(var(--s-100));
+  --color-slate-200: rgb(var(--s-200));
+  --color-slate-300: rgb(var(--s-300));
+  --color-slate-400: rgb(var(--s-400));
+  --color-slate-500: rgb(var(--s-500));
+  --color-slate-600: rgb(var(--s-600));
+  --color-slate-700: rgb(var(--s-700));
+  --color-slate-800: rgb(var(--s-800));
+  --color-slate-900: rgb(var(--s-900));
+  --color-slate-950: rgb(var(--s-950));
+
+  /* Emerald (good / recovery) */
+  --color-emerald-300: rgb(var(--ok-300));
+  --color-emerald-400: rgb(var(--ok-400));
+  --color-emerald-500: rgb(var(--ok-500));
+  --color-emerald-600: rgb(var(--ok-600));
+
+  /* Amber (warning / caution) */
+  --color-amber-200: rgb(var(--w-200));
+  --color-amber-300: rgb(var(--w-300));
+  --color-amber-400: rgb(var(--w-400));
+  --color-amber-500: rgb(var(--w-500));
+
+  /* Red (bad / error) */
+  --color-red-300: rgb(var(--e-300));
+  --color-red-400: rgb(var(--e-400));
+  --color-red-500: rgb(var(--e-500));
+  --color-red-600: rgb(var(--e-600));
+
+  /* Sky (accent 1) */
+  --color-sky-300: rgb(var(--a1-300));
+  --color-sky-400: rgb(var(--a1-400));
+
+  /* Violet (accent 2) */
+  --color-violet-300: rgb(var(--a2-300));
+  --color-violet-400: rgb(var(--a2-400));
+
+  /* Orange (accent 3) */
+  --color-orange-300: rgb(var(--a3-300));
+  --color-orange-400: rgb(var(--a3-400));
+
+  /* Cyan (accent 4) */
+  --color-cyan-300: rgb(var(--a4-300));
+  --color-cyan-400: rgb(var(--a4-400));
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
+  background: rgb(var(--s-950));
+  transition: background 0.2s ease;
+}
+
+/* ── Soreness slider custom styles ──────────────────────────────────────── */
+.soreness-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--s-800));
+  outline: none;
+}
+.soreness-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgb(var(--w-400));
+  border: 2px solid rgb(var(--s-950));
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgb(var(--w-400)), 0 4px 12px rgb(var(--w-400) / 0.35);
+}
+.soreness-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgb(var(--w-400));
+  border: 2px solid rgb(var(--s-950));
+  cursor: pointer;
+}
+
+/* ── Activity summary container query ───────────────────────────────────── */
+.as-root {
+  container-type: inline-size;
+}
+.as-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@container (min-width: 600px) {
+  .as-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .as-strip > .as-metric {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.75rem;
+    gap: 0.25rem;
+    border-left: 1px solid rgb(var(--s-800) / 0.8);
+  }
+  .as-strip > .as-metric:first-child {
+    border-left: 0;
+  }
+  .as-metric .as-label {
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+  }
+  .as-metric .as-value {
+    font-size: 1.25rem;
+  }
+}
+
+/* ── Light mode card border fix — ring-slate-800 is too close to card bg ─── */
+/* Bone s-500 (165,153,138) provides enough contrast on the cream background. */
+.light .ring-slate-800 {
+  --tw-ring-color: rgb(var(--s-500));
+}
+
+/* ── Light mode text contrast fixes ─────────────────────────────────────────
+   In the Bone palette the scale is inverted: s-600=(200,188,172) and
+   s-700=(224,213,198) are near-invisible on the cream bg (234,224,208).
+   Remap them to readable shades. Only the text color property is overridden. */
+.light .text-slate-600 { color: rgb(var(--s-400)); }
+.light .text-slate-700 { color: rgb(var(--s-500)); }
+
+/* ── Scrollbar hide utility ──────────────────────────────────────────────── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Theme circular-reveal transition ────────────────────────────────────── */
+/* Expands the incoming theme as a circle from the toggle button position.   */
+::view-transition-old(root) {
+  animation: none;
+  z-index: 1;
+}
+::view-transition-new(root) {
+  animation: theme-reveal 4s linear forwards;
+  z-index: 2;
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0px at var(--theme-x, 50%) var(--theme-y, 50%)); }
+  to   { clip-path: circle(200vmax at var(--theme-x, 50%) var(--theme-y, 50%)); }
 }

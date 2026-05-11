@@ -70,6 +70,41 @@ _DUCKDB_DDL_STATEMENTS: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_raw_apple_health_date ON raw_apple_health(date)",
     "CREATE INDEX IF NOT EXISTS idx_raw_apple_health_workouts_date ON raw_apple_health_workouts(date)",
     "CREATE INDEX IF NOT EXISTS idx_raw_hevy_workouts_date ON raw_hevy_workouts(date)",
+    # Intraday timeseries (HR, steps per sample)
+    """CREATE TABLE IF NOT EXISTS daily_timeseries (
+    date         DATE        NOT NULL,
+    ts           TIMESTAMPTZ NOT NULL,
+    metric       VARCHAR     NOT NULL,
+    value        DOUBLE,
+    PRIMARY KEY (date, ts, metric)
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_daily_ts_date ON daily_timeseries(date)",
+    # Per-workout timeseries
+    """CREATE TABLE IF NOT EXISTS workout_hr_samples (
+    workout_id  VARCHAR NOT NULL,
+    source      VARCHAR NOT NULL,
+    ts          TIMESTAMPTZ NOT NULL,
+    hr_avg      DOUBLE,
+    hr_min      DOUBLE,
+    hr_max      DOUBLE,
+    calories    DOUBLE,
+    steps       DOUBLE,
+    PRIMARY KEY (workout_id, ts)
+)""",
+    """CREATE TABLE IF NOT EXISTS workout_sets (
+    workout_id             VARCHAR NOT NULL,
+    exercise_index         INTEGER NOT NULL,
+    exercise_title         VARCHAR NOT NULL,
+    exercise_template_id   VARCHAR,
+    primary_muscle_group   VARCHAR,
+    set_index              INTEGER NOT NULL,
+    set_type               VARCHAR,
+    weight_kg              DOUBLE,
+    reps                   INTEGER,
+    duration_seconds       INTEGER,
+    rpe                    DOUBLE,
+    PRIMARY KEY (workout_id, exercise_index, set_index)
+)""",
 ]
 
 _SQLITE_DDL = """
@@ -106,6 +141,7 @@ CREATE TABLE IF NOT EXISTS daily_snapshot (
     sleep_awake_min     REAL,
     muscle_volume       TEXT CHECK (muscle_volume IS NULL OR json_valid(muscle_volume)),
     workouts            TEXT CHECK (workouts IS NULL OR json_valid(workouts)),
+    recovery_status     TEXT CHECK (recovery_status IS NULL OR json_valid(recovery_status)),
     apple_health_at     TIMESTAMP,
     hevy_at             TIMESTAMP,
     snapshot_complete   INTEGER NOT NULL DEFAULT 0,
@@ -121,8 +157,37 @@ BEGIN
     UPDATE daily_snapshot SET updated_at = CURRENT_TIMESTAMP WHERE date = OLD.date;
 END;
 
-CREATE TABLE IF NOT EXISTS claude_responses (
+CREATE TABLE IF NOT EXISTS daily_records (
     date              DATE PRIMARY KEY,
+    -- metrics snapshot (copied from daily_snapshot at analysis time)
+    steps             INTEGER,
+    active_calories   REAL,
+    basal_calories    REAL,
+    resting_hr        INTEGER,
+    hrv_ms            REAL,
+    cardio_recovery   REAL,
+    exercise_minutes  REAL,
+    stand_hours       INTEGER,
+    distance_mi       REAL,
+    flights_climbed   INTEGER,
+    body_weight_kg    REAL,
+    avg_heart_rate    REAL,
+    walking_hr_avg    REAL,
+    sleep_total_min   REAL,
+    sleep_deep_min    REAL,
+    sleep_rem_min     REAL,
+    sleep_awake_min   REAL,
+    -- workout summary
+    workout_count     INTEGER,
+    workout_names     TEXT,
+    muscle_volume     TEXT CHECK (muscle_volume IS NULL OR json_valid(muscle_volume)),
+    top_muscle_group  TEXT,
+    total_volume_kg   REAL,
+    -- muscle fatigue per muscle group (JSON: {"lats": "fatigued", ...})
+    muscle_fatigue    TEXT,
+    -- recovery status snapshot (JSON: {"lats": {"days_since_trained": 0, "recovery_pct": 0}, ...})
+    recovery_status   TEXT CHECK (recovery_status IS NULL OR json_valid(recovery_status)),
+    -- claude analysis
     score_overall     INTEGER,
     score_training    INTEGER,
     score_recovery    INTEGER,
@@ -131,7 +196,7 @@ CREATE TABLE IF NOT EXISTS claude_responses (
     summary           TEXT,
     critique          TEXT,
     callout           TEXT,
-    muscle_fatigue    TEXT,
+    history_days      INTEGER,
     raw_response      TEXT,
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -158,6 +223,14 @@ CREATE TABLE IF NOT EXISTS medications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_medications_active ON medications(active);
+
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    is_active     INTEGER NOT NULL DEFAULT 1,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 # ---------------------------------------------------------------------------
@@ -197,6 +270,24 @@ def get_duckdb() -> Generator[duckdb.DuckDBPyConnection, None, None]:
 # Initialisation
 # ---------------------------------------------------------------------------
 
+# Additive migrations — each runs ALTER TABLE and swallows "duplicate column" errors.
+# Add new entries here whenever a column is added to an existing table.
+_SQLITE_MIGRATIONS: list[str] = [
+    "ALTER TABLE daily_snapshot ADD COLUMN recovery_status TEXT CHECK (recovery_status IS NULL OR json_valid(recovery_status))",
+    "ALTER TABLE daily_snapshot ADD COLUMN notes TEXT",
+    # Multi-user readiness: user_id on data tables. Existing rows default to NULL
+    # (treated as user 1 until backfilled). Enforced in application code, not FK
+    # (SQLite can't add FK constraints via ALTER TABLE).
+    "ALTER TABLE daily_snapshot ADD COLUMN user_id INTEGER",
+    "ALTER TABLE daily_records  ADD COLUMN user_id INTEGER",
+    "CREATE INDEX IF NOT EXISTS idx_daily_snapshot_user ON daily_snapshot(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_daily_records_user  ON daily_records(user_id)",
+    # Clerk auth migration — stores the Clerk user ID alongside the local row
+    "ALTER TABLE users ADD COLUMN clerk_user_id TEXT",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL",
+]
+
+
 def init_db() -> None:
     """Create both DB files and all tables/indexes/sequences if they don't exist."""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -208,6 +299,12 @@ def init_db() -> None:
 
     with get_sqlite() as conn:
         conn.executescript(_SQLITE_DDL)
+        for stmt in _SQLITE_MIGRATIONS:
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
         log.info("SQLite schema ready: %s", SQLITE_PATH)
 
 
@@ -332,6 +429,66 @@ def upsert_snapshot_apple_health_workouts(date: str, workouts: list[dict]) -> No
     log.info("apple_health workouts upserted for %s (%d entries)", date, len(workouts))
 
 
+def upsert_snapshot_recovery_status(date: str, recovery_status: dict) -> None:
+    """Store the computed recovery status snapshot for date."""
+    with get_sqlite() as conn:
+        conn.execute(
+            "INSERT INTO daily_snapshot (date, recovery_status) VALUES (?, ?) "
+            "ON CONFLICT(date) DO UPDATE SET recovery_status = excluded.recovery_status",
+            (date, json.dumps(recovery_status)),
+        )
+    log.info("recovery_status stored for %s", date)
+
+
+def get_weekly_summary(before_date: str, days: int = 7) -> list[dict]:
+    """
+    Return per-day summaries for the N days immediately before before_date (exclusive).
+    Used to build the 7-day training history section of the Claude prompt.
+    """
+    from datetime import date as _date, timedelta
+    from_date = (_date.fromisoformat(before_date) - timedelta(days=days)).isoformat()
+    with get_sqlite() as conn:
+        rows = conn.execute(
+            """SELECT date, steps, exercise_minutes, sleep_total_min, hrv_ms,
+                      workouts, muscle_volume
+               FROM daily_snapshot
+               WHERE date >= ? AND date < ?
+               ORDER BY date""",
+            (from_date, before_date),
+        ).fetchall()
+    result = []
+    for row in rows:
+        d = dict(row)
+        for key in ("workouts", "muscle_volume"):
+            if d.get(key):
+                try:
+                    d[key] = json.loads(d[key])
+                except (json.JSONDecodeError, TypeError):
+                    d[key] = None
+        result.append(d)
+    return result
+
+
+def upsert_snapshot_notes(date: str, notes: str) -> None:
+    """Store free-text check-in notes for date."""
+    with get_sqlite() as conn:
+        conn.execute(
+            "INSERT INTO daily_snapshot (date, notes) VALUES (?, ?) "
+            "ON CONFLICT(date) DO UPDATE SET notes = excluded.notes",
+            (date, notes.strip()),
+        )
+    log.info("notes stored for %s", date)
+
+
+def get_soreness_for_date(date: str) -> dict[str, int]:
+    """Return {muscle: soreness_level} for a given date from soreness_log."""
+    with get_sqlite() as conn:
+        rows = conn.execute(
+            "SELECT muscle, soreness FROM soreness_log WHERE date = ?", (date,)
+        ).fetchall()
+    return {row["muscle"]: row["soreness"] for row in rows}
+
+
 def upsert_snapshot_hevy(
     date: str,
     body_weight_kg: float | None,
@@ -375,54 +532,141 @@ def upsert_snapshot_hevy(
 
 
 # ---------------------------------------------------------------------------
-# Claude response storage
+# daily_records — two-phase write: snapshot first, analysis second
 # ---------------------------------------------------------------------------
 
-def upsert_claude_response(date: str, parsed: dict, raw: str) -> None:
-    """Write Claude's structured response for date.
+def upsert_daily_record_snapshot(date: str, snapshot: dict) -> None:
+    """Write the metrics + workout portion of daily_records when snapshot completes.
 
-    Idempotent — the ON CONFLICT WHERE clause prevents overwriting a row
-    that already has a valid score_overall, atomically and without a
-    separate SELECT round-trip.
+    Called as soon as both Apple Health and Hevy data have arrived — before
+    Claude runs. Claude analysis fields are NULL until upsert_daily_record_analysis()
+    fills them in. Safe to call multiple times (idempotent on non-Claude fields).
+    """
+    snap = snapshot or {}
+    workouts: list[dict] = snap.get("workouts") or []
+    workout_names = [w.get("name") or w.get("title") for w in workouts
+                     if w.get("name") or w.get("title")]
+    muscle_volume: dict = snap.get("muscle_volume") or {}
+    top_muscle = max(muscle_volume, key=muscle_volume.get) if muscle_volume else None
+    total_volume = round(sum(muscle_volume.values()), 2) if muscle_volume else None
+
+    with get_sqlite() as conn:
+        conn.execute(
+            """
+            INSERT INTO daily_records (
+                date,
+                steps, active_calories, basal_calories, resting_hr, hrv_ms,
+                cardio_recovery, exercise_minutes, stand_hours, distance_mi,
+                flights_climbed, body_weight_kg, avg_heart_rate, walking_hr_avg,
+                sleep_total_min, sleep_deep_min, sleep_rem_min, sleep_awake_min,
+                workout_count, workout_names, muscle_volume, top_muscle_group,
+                total_volume_kg, recovery_status
+            ) VALUES (
+                ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT(date) DO UPDATE SET
+                steps           = excluded.steps,
+                active_calories = excluded.active_calories,
+                basal_calories  = excluded.basal_calories,
+                resting_hr      = excluded.resting_hr,
+                hrv_ms          = excluded.hrv_ms,
+                cardio_recovery = excluded.cardio_recovery,
+                exercise_minutes = excluded.exercise_minutes,
+                stand_hours     = excluded.stand_hours,
+                distance_mi     = excluded.distance_mi,
+                flights_climbed = excluded.flights_climbed,
+                body_weight_kg  = excluded.body_weight_kg,
+                avg_heart_rate  = excluded.avg_heart_rate,
+                walking_hr_avg  = excluded.walking_hr_avg,
+                sleep_total_min = excluded.sleep_total_min,
+                sleep_deep_min  = excluded.sleep_deep_min,
+                sleep_rem_min   = excluded.sleep_rem_min,
+                sleep_awake_min = excluded.sleep_awake_min,
+                workout_count   = excluded.workout_count,
+                workout_names   = excluded.workout_names,
+                muscle_volume   = excluded.muscle_volume,
+                top_muscle_group = excluded.top_muscle_group,
+                total_volume_kg = excluded.total_volume_kg,
+                recovery_status = excluded.recovery_status
+            """,
+            (
+                date,
+                snap.get("steps"), snap.get("active_calories"), snap.get("basal_calories"),
+                snap.get("resting_hr"), snap.get("hrv_ms"), snap.get("cardio_recovery"),
+                snap.get("exercise_minutes"), snap.get("stand_hours"), snap.get("distance_mi"),
+                snap.get("flights_climbed"), snap.get("body_weight_kg"),
+                snap.get("avg_heart_rate"), snap.get("walking_hr_avg"),
+                snap.get("sleep_total_min"), snap.get("sleep_deep_min"),
+                snap.get("sleep_rem_min"), snap.get("sleep_awake_min"),
+                len(workouts),
+                json.dumps(workout_names) if workout_names else None,
+                json.dumps(muscle_volume) if muscle_volume else None,
+                top_muscle, total_volume,
+                json.dumps(snap.get("recovery_status")) if snap.get("recovery_status") else None,
+            ),
+        )
+    log.info("daily_records snapshot written for %s", date)
+
+
+def upsert_daily_record_analysis(
+    date: str,
+    parsed: dict,
+    raw: str,
+    history_days: int | None = None,
+    force: bool = False,
+) -> None:
+    """Fill in Claude's analysis fields on an existing daily_records row.
+
+    force=True  — always overwrite (used by /api/analyze endpoint and 4-h cron).
+    force=False — skip if score_overall is already set (used by nightly job).
     """
     scores = parsed.get("scores", {})
-    sql = """
-        INSERT INTO claude_responses
-            (date, score_overall, score_training, score_recovery,
-             score_balance, score_consistency, summary, critique,
-             callout, muscle_fatigue, raw_response)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(date) DO UPDATE SET
-            score_overall     = excluded.score_overall,
-            score_training    = excluded.score_training,
-            score_recovery    = excluded.score_recovery,
-            score_balance     = excluded.score_balance,
-            score_consistency = excluded.score_consistency,
-            summary           = excluded.summary,
-            critique          = excluded.critique,
-            callout           = excluded.callout,
-            muscle_fatigue    = excluded.muscle_fatigue,
-            raw_response      = excluded.raw_response
-        WHERE claude_responses.score_overall IS NULL
-    """
+    where_clause = "" if force else "WHERE daily_records.score_overall IS NULL"
     with get_sqlite() as conn:
-        cursor = conn.execute(sql, (
-            date,
-            scores.get("overall"),
-            scores.get("training_quality"),
-            scores.get("recovery"),
-            scores.get("volume_balance"),
-            scores.get("consistency"),
-            parsed.get("summary"),
-            json.dumps(parsed.get("critique")) if parsed.get("critique") is not None else None,
-            parsed.get("callout"),
-            json.dumps(parsed.get("muscle_fatigue")) if parsed.get("muscle_fatigue") is not None else None,
-            raw,
-        ))
+        cursor = conn.execute(
+            f"""
+            INSERT INTO daily_records (
+                date, muscle_fatigue,
+                score_overall, score_training, score_recovery,
+                score_balance, score_consistency,
+                summary, critique, callout, history_days, raw_response
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(date) DO UPDATE SET
+                muscle_fatigue    = excluded.muscle_fatigue,
+                score_overall     = excluded.score_overall,
+                score_training    = excluded.score_training,
+                score_recovery    = excluded.score_recovery,
+                score_balance     = excluded.score_balance,
+                score_consistency = excluded.score_consistency,
+                summary           = excluded.summary,
+                critique          = excluded.critique,
+                callout           = excluded.callout,
+                history_days      = excluded.history_days,
+                raw_response      = excluded.raw_response
+            {where_clause}
+            """,
+            (
+                date,
+                json.dumps(parsed.get("muscle_fatigue")) if parsed.get("muscle_fatigue") is not None else None,
+                scores.get("overall"),
+                scores.get("training_quality"),
+                scores.get("recovery"),
+                scores.get("volume_balance"),
+                scores.get("consistency"),
+                parsed.get("summary"),
+                json.dumps(parsed.get("critique")) if parsed.get("critique") is not None else None,
+                parsed.get("callout"),
+                history_days,
+                raw,
+            ),
+        )
     if cursor.rowcount == 0:
-        log.info("claude_responses already populated for %s — skipping", date)
+        log.info("daily_records analysis already set for %s — skipping", date)
     else:
-        log.info("claude_responses written for %s", date)
+        log.info("daily_records analysis written for %s (force=%s)", date, force)
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +682,7 @@ def get_snapshot(date: str) -> dict | None:
     if not row:
         return None
     d = dict(row)
-    for key in ("muscle_volume", "workouts"):
+    for key in ("muscle_volume", "workouts", "recovery_status"):
         if d.get(key):
             try:
                 d[key] = json.loads(d[key])
@@ -467,22 +711,55 @@ def get_snapshots(from_date: str, to_date: str) -> list[dict]:
     return result
 
 
-def get_claude_response(date: str) -> dict | None:
-    """Return a claude_responses row as a dict, or None."""
+def get_daily_record(date: str) -> dict | None:
+    """Return a daily_records row structured with nested subfields, or None."""
     with get_sqlite() as conn:
         row = conn.execute(
-            "SELECT * FROM claude_responses WHERE date = ?", (date,)
+            "SELECT * FROM daily_records WHERE date = ?", (date,)
         ).fetchone()
     if not row:
         return None
     d = dict(row)
-    for key in ("critique", "muscle_fatigue"):
+    for key in ("critique", "muscle_fatigue", "workout_names", "muscle_volume", "recovery_status"):
         if d.get(key):
             try:
                 d[key] = json.loads(d[key])
             except (json.JSONDecodeError, TypeError):
                 pass
-    return d
+    return {
+        "date": d["date"],
+        "metrics": {k: d.get(k) for k in (
+            "steps", "active_calories", "basal_calories", "resting_hr",
+            "hrv_ms", "cardio_recovery", "exercise_minutes", "stand_hours",
+            "distance_mi", "flights_climbed", "body_weight_kg",
+            "avg_heart_rate", "walking_hr_avg",
+            "sleep_total_min", "sleep_deep_min", "sleep_rem_min", "sleep_awake_min",
+        )},
+        "workouts": {
+            "count":            d.get("workout_count"),
+            "names":            d.get("workout_names"),
+            "muscle_volume":    d.get("muscle_volume"),
+            "top_muscle_group": d.get("top_muscle_group"),
+            "total_volume_kg":  d.get("total_volume_kg"),
+            "muscle_fatigue":   d.get("muscle_fatigue"),
+            "recovery_status":  d.get("recovery_status"),
+        },
+        "analysis": {
+            "scores": {
+                "overall":          d.get("score_overall"),
+                "training_quality": d.get("score_training"),
+                "recovery":         d.get("score_recovery"),
+                "volume_balance":   d.get("score_balance"),
+                "consistency":      d.get("score_consistency"),
+            },
+            "summary":      d.get("summary"),
+            "critique":     d.get("critique"),
+            "callout":      d.get("callout"),
+            "history_days": d.get("history_days"),
+            "raw_response": d.get("raw_response"),
+        },
+        "created_at": d.get("created_at"),
+    }
 
 
 def get_score_history(days: int = 30) -> list[dict]:
@@ -490,12 +767,16 @@ def get_score_history(days: int = 30) -> list[dict]:
     with get_sqlite() as conn:
         rows = conn.execute(
             """
-            SELECT date, score_overall, score_training, score_recovery,
-                   score_balance, score_consistency
+            SELECT date,
+                   score_overall     AS overall,
+                   score_training    AS training_quality,
+                   score_recovery    AS recovery,
+                   score_balance     AS volume_balance,
+                   score_consistency AS consistency
             FROM (
                 SELECT date, score_overall, score_training, score_recovery,
                        score_balance, score_consistency
-                FROM claude_responses
+                FROM daily_records
                 WHERE score_overall IS NOT NULL
                 ORDER BY date DESC
                 LIMIT ?
@@ -522,6 +803,211 @@ def get_exercise_template(template_id: str) -> dict | None:
         except (json.JSONDecodeError, TypeError):
             d["secondary_muscle_groups"] = []
     return d
+
+
+# ---------------------------------------------------------------------------
+# Workout timeseries — write
+# ---------------------------------------------------------------------------
+
+def upsert_workout_hr_samples(workout_id: str, source: str, samples: list[dict]) -> None:
+    """Replace all per-minute HR/calorie/step samples for one workout (idempotent)."""
+    if not samples:
+        return
+    rows = [
+        (
+            workout_id, source, s["ts"],
+            s.get("hr_avg"), s.get("hr_min"), s.get("hr_max"),
+            s.get("calories"), s.get("steps"),
+        )
+        for s in samples
+    ]
+    with get_duckdb() as con:
+        con.execute("BEGIN")
+        try:
+            con.execute("DELETE FROM workout_hr_samples WHERE workout_id = ?", (workout_id,))
+            con.executemany(
+                "INSERT INTO workout_hr_samples "
+                "(workout_id, source, ts, hr_avg, hr_min, hr_max, calories, steps) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+    log.debug("workout_hr_samples: %d rows stored for %s", len(rows), workout_id)
+
+
+def upsert_workout_sets(workout_id: str, exercises: list[dict]) -> None:
+    """Replace all set-level rows for one Hevy workout (idempotent)."""
+    rows = []
+    for ex in exercises:
+        ex_idx = ex.get("index", 0)
+        for s in ex.get("sets") or []:
+            rows.append((
+                workout_id,
+                ex_idx,
+                ex.get("title", ""),
+                ex.get("exercise_template_id"),
+                ex.get("primary_muscle_group"),
+                s.get("index", 0),
+                s.get("type"),
+                s.get("weight_kg"),
+                s.get("reps"),
+                s.get("duration_seconds"),
+                s.get("rpe"),
+            ))
+    if not rows:
+        return
+    with get_duckdb() as con:
+        con.execute("BEGIN")
+        try:
+            con.execute("DELETE FROM workout_sets WHERE workout_id = ?", (workout_id,))
+            con.executemany(
+                "INSERT INTO workout_sets "
+                "(workout_id, exercise_index, exercise_title, exercise_template_id, "
+                "primary_muscle_group, set_index, set_type, weight_kg, reps, "
+                "duration_seconds, rpe) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+    log.debug("workout_sets: %d rows stored for %s", len(rows), workout_id)
+
+
+# ---------------------------------------------------------------------------
+# Workout timeseries — read
+# ---------------------------------------------------------------------------
+
+def get_workout_hr_samples(workout_id: str) -> list[dict]:
+    """Return per-minute HR/calorie/step samples for a workout, ordered by time."""
+    with get_duckdb() as con:
+        rows = con.execute(
+            "SELECT ts, hr_avg, hr_min, hr_max, calories, steps "
+            "FROM workout_hr_samples WHERE workout_id = ? ORDER BY ts",
+            (workout_id,),
+        ).fetchall()
+    return [
+        {
+            "ts":       str(r[0]),
+            "hr_avg":   r[1],
+            "hr_min":   r[2],
+            "hr_max":   r[3],
+            "calories": r[4],
+            "steps":    r[5],
+        }
+        for r in rows
+    ]
+
+
+def get_workout_sets(workout_id: str) -> list[dict]:
+    """Return set-level data for a Hevy workout, grouped by exercise."""
+    with get_duckdb() as con:
+        rows = con.execute(
+            "SELECT exercise_index, exercise_title, exercise_template_id, "
+            "primary_muscle_group, set_index, set_type, weight_kg, reps, "
+            "duration_seconds, rpe "
+            "FROM workout_sets WHERE workout_id = ? ORDER BY exercise_index, set_index",
+            (workout_id,),
+        ).fetchall()
+    exercises: dict[int, dict] = {}
+    for r in rows:
+        ex_idx = r[0]
+        if ex_idx not in exercises:
+            exercises[ex_idx] = {
+                "exercise_index":      ex_idx,
+                "title":               r[1],
+                "exercise_template_id": r[2],
+                "primary_muscle_group": r[3],
+                "sets": [],
+            }
+        exercises[ex_idx]["sets"].append({
+            "set_index":        r[4],
+            "type":             r[5],
+            "weight_kg":        r[6],
+            "reps":             r[7],
+            "duration_seconds": r[8],
+            "rpe":              r[9],
+        })
+    return list(exercises.values())
+
+
+# ---------------------------------------------------------------------------
+# Activity / baseline helpers (used by REST API)
+# ---------------------------------------------------------------------------
+
+def get_metric_baselines(days: int = 30) -> dict:
+    """Return N-day trailing averages for the four recovery metrics."""
+    with get_sqlite() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                AVG(hrv_ms)          AS hrv_avg,
+                AVG(resting_hr)      AS resting_hr_avg,
+                AVG(cardio_recovery) AS cardio_recovery_avg,
+                AVG(walking_hr_avg)  AS walking_hr_baseline
+            FROM daily_snapshot
+            WHERE date >= date('now', ? || ' days')
+              AND date < date('now')
+            """,
+            (f"-{days}",),
+        ).fetchone()
+    return dict(row) if row else {}
+
+
+def get_activity_history(days: int = 30) -> list[dict]:
+    """Return daily activity rows for the ActivityCharts line chart."""
+    with get_sqlite() as conn:
+        rows = conn.execute(
+            """
+            SELECT date, steps, active_calories, hrv_ms,
+                   ROUND(body_weight_kg * 2.20462, 1) AS body_weight_lbs,
+                   resting_hr, cardio_recovery
+            FROM daily_snapshot
+            WHERE date >= date('now', ? || ' days')
+            ORDER BY date ASC
+            """,
+            (f"-{days}",),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Daily timeseries — write / read (intraday HR and step samples)
+# ---------------------------------------------------------------------------
+
+def upsert_daily_timeseries(date: str, samples: list[dict]) -> None:
+    """Upsert per-sample intraday timeseries rows (idempotent)."""
+    if not samples:
+        return
+    rows = [(date, s["ts"], s["metric"], s["value"]) for s in samples]
+    with get_duckdb() as con:
+        con.execute("BEGIN")
+        try:
+            con.executemany(
+                "INSERT OR REPLACE INTO daily_timeseries (date, ts, metric, value) "
+                "VALUES (?, ?, ?, ?)",
+                rows,
+            )
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+    log.debug("daily_timeseries: %d rows stored for %s", len(rows), date)
+
+
+def get_daily_timeseries(date: str, metric: str) -> list[dict]:
+    """Return intraday samples for one date + metric, ordered by time."""
+    with get_duckdb() as con:
+        rows = con.execute(
+            "SELECT ts, value FROM daily_timeseries "
+            "WHERE date = ? AND metric = ? ORDER BY ts",
+            (date, metric),
+        ).fetchall()
+    return [{"ts": str(r[0]), "value": r[1]} for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -565,4 +1051,63 @@ if __name__ == "__main__":
         append_raw_blob("raw_hevy_workouts", date, {"test": True})
         print("  raw blob appended")
 
-        print("Smoke test passed.")
+
+# ---------------------------------------------------------------------------
+# User management
+# ---------------------------------------------------------------------------
+
+def create_user(email: str, password_hash: str) -> int:
+    """Insert a new user and return their id."""
+    with get_sqlite() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+            (email.lower().strip(), password_hash),
+        )
+        return cur.lastrowid
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """Return the user row for email, or None."""
+    with get_sqlite() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = ? AND is_active = 1",
+            (email.lower().strip(),),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    """Return the user row for id, or None."""
+    with get_sqlite() as conn:
+        row = conn.execute(
+            "SELECT id, email, is_active, created_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_clerk_id(clerk_user_id: str) -> dict | None:
+    """Return the local user row matching a Clerk user ID, or None."""
+    with get_sqlite() as conn:
+        row = conn.execute(
+            "SELECT id, email, is_active FROM users WHERE clerk_user_id = ?",
+            (clerk_user_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def create_user_from_clerk(clerk_user_id: str, email: str | None) -> dict:
+    """Create (or claim) a local user record on first Clerk login and return it."""
+    resolved_email = (email or f"{clerk_user_id}@clerk.local").lower().strip()
+    with get_sqlite() as conn:
+        # If a row with this email already exists (pre-Clerk account), just stamp it.
+        conn.execute(
+            """INSERT INTO users (email, password_hash, clerk_user_id) VALUES (?, '', ?)
+               ON CONFLICT(email) DO UPDATE SET clerk_user_id = excluded.clerk_user_id""",
+            (resolved_email, clerk_user_id),
+        )
+        row = conn.execute(
+            "SELECT id, email, is_active FROM users WHERE clerk_user_id = ?",
+            (clerk_user_id,),
+        ).fetchone()
+    return dict(row)
