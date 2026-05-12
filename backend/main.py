@@ -8,6 +8,7 @@ Startup:
 Webhooks:
   POST /webhook/apple-health           — ingest metrics into daily_snapshot
   POST /webhook/apple-health-workouts  — merge workouts into daily_snapshot
+  POST /webhook/apple-health-sleep     — ingest sleep_analysis entries into daily_snapshot
 
 REST (frontend):
   GET  /health
@@ -216,6 +217,66 @@ async def webhook_apple_health_workouts(
         log.info("[webhook/apple-health-workouts] %d workouts ingested for %s",
                  len(workouts), target_date)
     return {"status": "ok", "dates": sorted(dates), "workouts_ingested": total_workouts}
+
+
+@app.post("/webhook/apple-health-sleep")
+async def webhook_apple_health_sleep(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Dedicated endpoint for sleep_analysis payloads.
+
+    Expects the same envelope as the metrics endpoint but only processes
+    the sleep_analysis metric. Saves the raw payload to DuckDB for
+    inspection, then parses and upserts sleep columns into daily_snapshot.
+    """
+    _verify_bearer(authorization)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Log the raw payload to a file so we can inspect the format once.
+    import json as _json
+    from datetime import datetime as _dt
+    from pathlib import Path
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+    (log_dir / f"sleep_payload_{ts}.json").write_text(_json.dumps(payload, indent=2))
+    log.info("[webhook/apple-health-sleep] payload logged to sleep_payload_%s.json", ts)
+
+    dates = apple_health._detect_all_dates(payload)
+    if not dates:
+        # Try to find dates from sleep_analysis entries directly.
+        for m in payload.get("data", {}).get("metrics") or []:
+            if m.get("name") == "sleep_analysis":
+                for entry in m.get("data") or []:
+                    ts_str = entry.get("date") or ""
+                    try:
+                        dates.add(apple_health._local_date(ts_str))
+                    except Exception:
+                        pass
+    if not dates:
+        log.warning("[webhook/apple-health-sleep] no date detected in payload")
+        return {"status": "ok", "ingested": False, "reason": "no date in payload",
+                "note": "raw payload saved to logs/"}
+
+    database.append_raw_blob("raw_apple_health", min(sorted(dates)), payload)
+
+    total_fields = 0
+    for target_date in sorted(dates):
+        sleep_fields = apple_health._parse_sleep_from_payload(payload, target_date)
+        if sleep_fields:
+            database.upsert_snapshot_apple_health(target_date, sleep_fields)
+            total_fields += len(sleep_fields)
+            log.info("[webhook/apple-health-sleep] %d sleep fields for %s: %s",
+                     len(sleep_fields), target_date, sleep_fields)
+        else:
+            log.info("[webhook/apple-health-sleep] no sleep data for %s", target_date)
+
+    return {"status": "ok", "dates": sorted(dates), "sleep_fields": total_fields,
+            "note": "raw payload saved to logs/"}
 
 
 # ---------------------------------------------------------------------------
@@ -435,11 +496,13 @@ async def trigger_analysis(date: str, _: dict = Depends(get_current_user)):
     # Pull today's soreness check-in and attach it to the snapshot for the prompt.
     snapshot["soreness"] = database.get_soreness_for_date(date)
 
-    baselines = database.get_metric_baselines(30)
-    history   = database.get_weekly_summary(date)
+    baselines     = database.get_metric_baselines(30)
+    history       = database.get_weekly_summary(date)
+    prev_date     = (date_cls.fromisoformat(date) - timedelta(days=1)).isoformat()
+    prev_analysis = database.get_daily_record(prev_date)
 
     try:
-        parsed, raw = claude_analysis.run_analysis(date, snapshot, baselines, history)
+        parsed, raw = claude_analysis.run_analysis(date, snapshot, baselines, history, prev_analysis)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

@@ -9,8 +9,6 @@ const MUSCLES = [
 
 const SCALE = ['None', 'Mild', 'Noticeable', 'Moderate', 'Significant', 'Severe']
 
-const TODAY = new Date().toISOString().slice(0, 10)
-
 function pretty(key) {
   return key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
 }
@@ -85,7 +83,7 @@ function ScaleLegend() {
   )
 }
 
-function CheckedInView({ logged }) {
+function CheckedInView({ logged, date }) {
   const soreness = logged.soreness ?? logged
   const note     = logged.note ?? null
   const nonZero  = Object.entries(soreness).filter(([, v]) => v > 0)
@@ -101,7 +99,7 @@ function CheckedInView({ logged }) {
         </div>
         <div>
           <div className="text-slate-200 text-sm font-semibold">Logged for today</div>
-          <div className="text-slate-400 text-[11px] mt-0.5 uppercase tracking-wider font-mono">{TODAY}</div>
+          <div className="text-slate-400 text-[11px] mt-0.5 uppercase tracking-wider font-mono">{date}</div>
         </div>
       </div>
 
@@ -139,6 +137,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
   const [submitted, setSubmitted] = useState(null)
   const [loading, setLoading]     = useState(true)
   const [open, setOpen]           = useState(false)
+  const [today, setToday]         = useState('')
   const [soreness, setSoreness]   = useState(() =>
     Object.fromEntries(MUSCLES.map(m => [m, 0]))
   )
@@ -148,6 +147,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
     apiFetch('/api/checkin/today')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
+        if (data?.date) setToday(data.date)
         if (data?.checked_in) {
           setSubmitted({ soreness: data.soreness, note: data.note })
         }
@@ -160,7 +160,8 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
   const closeModal = () => { setOpen(false); onClose?.() }
 
   const handleSubmit = () => {
-    const payload = { date: TODAY, soreness, note: note.trim() }
+    if (!today) return
+    const payload = { date: today, soreness, note: note.trim() }
     apiFetch('/api/checkin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,7 +180,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
         <div className="h-2 w-24 bg-slate-800/60 rounded" />
       </section>
     )
-    if (submitted) return <CheckedInView logged={submitted} />
+    if (submitted) return <CheckedInView logged={submitted} date={today || '—'} />
     return (
       <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
         <div className="flex items-baseline justify-between mb-4">
@@ -193,7 +194,8 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
         <NoteField value={note} onChange={setNote} />
         <button
           onClick={handleSubmit}
-          className="mt-6 w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors"
+          className="mt-6 w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!today}
         >
           Submit Check-in
         </button>
@@ -242,7 +244,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                   ))}
                 </div>
               ) : submitted ? (
-                <CheckedInView logged={submitted} />
+                <CheckedInView logged={submitted} date={today} />
               ) : (
                 <>
                   <ScaleLegend />
@@ -250,7 +252,8 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                   <NoteField value={note} onChange={setNote} />
                   <button
                     onClick={handleSubmit}
-                    className="mt-6 w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors"
+                    disabled={!today}
+                    className="mt-6 w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Submit Check-in
                   </button>

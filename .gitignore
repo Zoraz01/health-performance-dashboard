@@ -36,6 +36,7 @@ build/
 
 # Logs
 *.log
+backend/logs/
 
 # macOS
 .DS_Store

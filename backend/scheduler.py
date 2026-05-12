@@ -41,31 +41,46 @@ def _local_today() -> str:
 
 def compute_recovery_status(target_date: str) -> dict[str, dict]:
     """
-    For each muscle group, find the last date it received any volume,
-    then compute days_since_trained and recovery_pct.
+    For each muscle group, compute days_since_trained and recovery_pct.
 
-    Recovery is linear: 0 % immediately after training, 100 % at 72 h (3 days).
-    Looks back up to 14 days. Muscles with no data in that window are
-    treated as fully recovered.
+    Recovery window scales with volume intensity relative to the 14-day peak
+    for that muscle:
+      intensity ≈ 1.0 (full primary session) → 3 days to full recovery
+      intensity ≈ 0.1 (secondary/spillover)  → ~0.75 days to full recovery
+      Formula: recovery_days = 0.5 + intensity * 2.5  (range 0.5–3.0)
+
+    This prevents a muscle from showing 0% recovery just because it appeared
+    as a secondary group in an unrelated session (e.g. back during leg day).
     """
     from_date = (date.fromisoformat(target_date) - timedelta(days=14)).isoformat()
     snapshots = database.get_snapshots(from_date, target_date)
 
     last_trained: dict[str, date] = {}
+    last_volume:  dict[str, float] = {}
+    max_volume:   dict[str, float] = {}
     for snap in snapshots:
         snap_date = date.fromisoformat(snap["date"])
         muscle_volume = snap.get("muscle_volume") or {}
         for muscle, volume in muscle_volume.items():
             if volume and volume > 0:
+                vol = float(volume)
                 if muscle not in last_trained or snap_date > last_trained[muscle]:
                     last_trained[muscle] = snap_date
+                    last_volume[muscle]  = vol
+                max_volume[muscle] = max(max_volume.get(muscle, 0.0), vol)
 
     target = date.fromisoformat(target_date)
     result: dict[str, dict] = {}
     for muscle in ALL_MUSCLES:
         if muscle in last_trained:
             days = (target - last_trained[muscle]).days
-            recovery_pct = min(100, round((days / 3) * 100))
+            vol  = last_volume.get(muscle, 0.0)
+            peak = max_volume.get(muscle) or vol or 1.0
+            # Fraction of the heaviest session this muscle has seen in 14 days.
+            # Secondary hits (0.4× multiplier in muscle_map) typically land at 0.1–0.4.
+            intensity     = min(1.0, vol / peak)
+            recovery_days = 0.5 + intensity * 2.5
+            recovery_pct  = min(100, round((days / recovery_days) * 100))
         else:
             days = 14
             recovery_pct = 100
@@ -206,10 +221,12 @@ async def nightly_claude_analysis() -> None:
     snapshot["recovery_status"] = compute_recovery_status(yesterday)
     snapshot["soreness"] = database.get_soreness_for_date(yesterday)
 
-    baselines = database.get_metric_baselines(30)
-    history   = database.get_weekly_summary(yesterday)
+    baselines    = database.get_metric_baselines(30)
+    history      = database.get_weekly_summary(yesterday)
+    prev_date    = (date.fromisoformat(yesterday) - timedelta(days=1)).isoformat()
+    prev_analysis = database.get_daily_record(prev_date)
     try:
-        parsed, raw = claude_analysis.run_analysis(yesterday, snapshot, baselines, history)
+        parsed, raw = claude_analysis.run_analysis(yesterday, snapshot, baselines, history, prev_analysis)
         database.upsert_daily_record_analysis(yesterday, parsed, raw, force=False)
         log.info("[claude_analysis] nightly analysis written for %s (overall=%s)",
                  yesterday, parsed.get("scores", {}).get("overall"))

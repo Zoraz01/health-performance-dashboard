@@ -98,10 +98,73 @@ def aggregate_metric(
 
 def parse_sleep(entries: list[dict], target_date: str) -> dict:
     """
-    Stub — returns {} until a real sleep payload is available to inspect.
-    Sleep tracking is not currently enabled; sleep columns remain NULL.
-    Phase 3+: implement once we have a sleep_analysis sample.
+    Parse Apple Health sleep_analysis entries for target_date.
+
+    Apple Health AutoExport uses short stage names:
+      "Core"   / "AsleepCore"        → light sleep (counted in total)
+      "Deep"   / "AsleepDeep"        → deep sleep (counted in total + deep)
+      "REM"    / "AsleepREM"         → REM sleep (counted in total + rem)
+      "Asleep" / "AsleepUnspecified" → unspecified sleep (counted in total)
+      "In Bed" / "InBed"             → in-bed time (not counted as sleep)
+      "Awake"                        → awake time during sleep window
+
+    qty field is in hours.
     """
+    ASLEEP  = {"Asleep", "AsleepUnspecified", "Core", "AsleepCore"}
+    DEEP    = {"Deep", "AsleepDeep"}
+    REM     = {"REM", "AsleepREM"}
+    IN_BED  = {"In Bed", "InBed"}
+    AWAKE   = {"Awake"}
+
+    total_min = deep_min = rem_min = awake_min = 0.0
+
+    for entry in entries:
+        ts = entry.get("date") or entry.get("startDate") or ""
+        try:
+            entry_date = _local_date(ts)
+        except Exception:
+            continue
+        if entry_date != target_date:
+            continue
+
+        raw_qty = entry.get("qty") or entry.get("Qty")
+        try:
+            minutes = float(raw_qty) * 60.0
+        except (TypeError, ValueError):
+            continue
+        if minutes <= 0:
+            continue
+
+        stage = entry.get("value") or ""
+        if stage in DEEP:
+            total_min += minutes
+            deep_min  += minutes
+        elif stage in REM:
+            total_min += minutes
+            rem_min   += minutes
+        elif stage in ASLEEP:
+            total_min += minutes
+        elif stage in AWAKE:
+            awake_min += minutes
+        # IN_BED entries overlap with sleep stages — skip to avoid double-counting
+
+    out: dict = {}
+    if total_min > 0:
+        out["sleep_total_min"] = round(total_min, 1)
+    if deep_min > 0:
+        out["sleep_deep_min"] = round(deep_min, 1)
+    if rem_min > 0:
+        out["sleep_rem_min"] = round(rem_min, 1)
+    if awake_min > 0:
+        out["sleep_awake_min"] = round(awake_min, 1)
+    return out
+
+
+def _parse_sleep_from_payload(payload: dict, target_date: str) -> dict:
+    """Extract sleep fields from any payload that contains a sleep_analysis metric."""
+    for m in payload.get("data", {}).get("metrics") or []:
+        if m.get("name") == "sleep_analysis":
+            return parse_sleep(m.get("data") or [], target_date)
     return {}
 
 
@@ -250,12 +313,105 @@ def extract_hr_samples(workout: dict) -> list[dict]:
     return result
 
 
-def ingest_metrics(payload: dict, target_date: str) -> dict:
-    """Parse metrics payload, append raw blob, then write to DB. Returns extracted fields."""
+def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
+    """
+    Re-aggregate metrics for target_date from ALL raw blobs stored in DuckDB.
+
+    Apple Health sends incremental payloads (only data since last sync). Each
+    4-hour sync therefore only contains a slice of the day. Re-aggregating from
+    all stored blobs — deduplicating entries by exact timestamp — gives the true
+    full-day totals without needing to track running deltas.
+
+    Returns None if the DuckDB read fails so callers can abort rather than
+    silently writing empty data.
+    """
     import database
-    fields = parse_metrics_payload(payload, target_date)
-    log.info("[apple_health] metrics for %s: %d fields extracted", target_date, len(fields))
+    try:
+        with database.get_duckdb() as con:
+            rows = con.execute(
+                "SELECT payload::text FROM raw_apple_health WHERE date = ? ORDER BY id",
+                (target_date,),
+            ).fetchall()
+    except Exception:
+        log.exception("[apple_health] DuckDB read failed for %s — aborting re-aggregation", target_date)
+        return None
+
+    if not rows:
+        # append_raw_blob must have failed silently — no data to aggregate.
+        log.error("[apple_health] no blobs in DuckDB for %s after append — DuckDB write likely failed", target_date)
+        return None
+
+    # Merge all metric entries across blobs, deduplicating by (metric, timestamp).
+    # When two blobs share the same timestamp for a metric, the later blob wins.
+    by_name: dict[str, dict[str, dict]] = {}
+    all_medications: list[str] = []
+    for (payload_str,) in rows:
+        try:
+            payload = json.loads(payload_str)
+        except json.JSONDecodeError:
+            continue
+        data = payload.get("data") or {}
+        for m in data.get("metrics") or []:
+            name = m.get("name")
+            if not name:
+                continue
+            bucket = by_name.setdefault(name, {})
+            for entry in (m.get("data") or []):
+                ts = entry.get("date")
+                if ts:
+                    if ts in bucket and bucket[ts] != entry:
+                        log.debug("[apple_health] ts collision %s / %s — overwriting", name, ts)
+                    bucket[ts] = entry
+        # Collect medication names logged for this date.
+        for med in data.get("medications") or []:
+            name = med.get("name") or med.get("title") or ""
+            if not name:
+                continue
+            date_str = med.get("date") or med.get("startDate") or ""
+            try:
+                med_date = _local_date(date_str) if date_str else target_date
+            except Exception:
+                med_date = target_date
+            if med_date == target_date and name not in all_medications:
+                all_medications.append(name)
+
+    merged: dict[str, list] = {name: list(entries.values()) for name, entries in by_name.items()}
+
+    out: dict = {}
+    for metric_name, method, column in METRIC_RULES:
+        entries = merged.get(metric_name)
+        if entries is None:
+            continue
+        value = aggregate_metric(entries, method, target_date)
+        if value is not None:
+            out[column] = value
+
+    sleep_entries = merged.get("sleep_analysis")
+    if sleep_entries:
+        out.update(parse_sleep(sleep_entries, target_date))
+
+    if all_medications:
+        import json as _json
+        out["medications_today"] = _json.dumps(all_medications)
+
+    return out
+
+
+def ingest_metrics(payload: dict, target_date: str) -> dict:
+    """
+    Append raw blob, then re-aggregate ALL blobs for target_date and write to DB.
+
+    Re-aggregation from all stored blobs (instead of just the current payload)
+    ensures cumulative accuracy across the 4-hour incremental syncs Apple Health
+    sends — each sync only contains data since the last, so processing them
+    individually would reset metrics to the latest window's values.
+    """
+    import database
     database.append_raw_blob("raw_apple_health", target_date, payload)
+    fields = _aggregate_all_blobs_for_date(target_date)
+    if fields is None:
+        raise RuntimeError(f"DuckDB re-aggregation failed for {target_date} — raw blob stored but snapshot not updated")
+    log.info("[apple_health] metrics for %s: %d fields extracted (all blobs)", target_date, len(fields))
     complete = database.upsert_snapshot_apple_health(target_date, fields)
     if complete:
         log.info("[apple_health] snapshot complete for %s — Claude can run", target_date)

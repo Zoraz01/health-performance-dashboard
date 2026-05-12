@@ -13,7 +13,7 @@ Output schema (stored in daily_records.analysis):
       "consistency":      int 1-10
     },
     "summary":  str,
-    "critique": list[str],
+    "critique": list[str],   # exactly 3 items; stored under key "critique"
     "callout":  str
   }
 """
@@ -27,6 +27,11 @@ from datetime import date as _date, timedelta
 log = logging.getLogger(__name__)
 
 CLAUDE_BIN = shutil.which("claude") or "/Users/zoraz/.local/bin/claude"
+
+
+def _is_score(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
 
 _PROMPT_HEADER = """\
 You are a personal sports science analyst. You have access to one user's Apple Health \
@@ -45,17 +50,28 @@ This is YESTERDAY's completed data — all Apple Health syncs and Hevy workouts 
 day are final by the time this runs (3 am nightly job).
 
 ## Output format
-Respond with valid JSON only. No markdown fences. No text outside the JSON object.
+
+Respond with VALID JSON ONLY.
+- No markdown fences (no ```json or ```).
+- No text, commentary, or explanation before or after the JSON object.
+- All score values must be integers (whole numbers, never floats like 7.5).
+- All score values must be in range 1–10 inclusive.
+- "critique" must be an array of EXACTLY 3 strings — no more, no fewer.
+- "summary" must be a single string (not an array).
+- "callout" must be a single string (not an array).
+- Do not add any keys not listed below.
+
+The output must match this structure exactly:
 
 {
   "scores": {
-    "overall":          <int 1-10>,
-    "training_quality": <int 1-10>,
-    "recovery":         <int 1-10>,
-    "volume_balance":   <int 1-10>,
-    "consistency":      <int 1-10>
+    "overall":          <integer 1-10, weighted composite — see rubric>,
+    "training_quality": <integer 1-10 — see rubric>,
+    "recovery":         <integer 1-10 — see rubric>,
+    "volume_balance":   <integer 1-10 — see rubric>,
+    "consistency":      <integer 1-10 — see rubric>
   },
-  "summary": "<2-3 sentences — name the dominant signal, cite specific numbers>",
+  "summary": "<2-3 sentences — name the dominant signal, cite specific numbers from the data>",
   "critique": [
     "<observation 1 — must cite an actual value from the data>",
     "<observation 2 — must cite an actual value from the data>",
@@ -66,11 +82,17 @@ Respond with valid JSON only. No markdown fences. No text outside the JSON objec
 
 ## Scoring rubric
 
-overall
-  Weighted composite: recovery 30% + training_quality 30% + volume_balance 20% + consistency 20%.
-  Reflects readiness going into the next session. Round to nearest int.
+Scores must be CONSISTENT and DATA-ANCHORED. The same input numbers on different days \
+must produce the same score. Apply every rubric below mechanically. \
+Do NOT output your calculations — compute all scores internally, then write only the final JSON.
 
-training_quality
+### overall
+  Formula: round(training_quality×0.35 + volume_balance×0.25 + consistency×0.20 + recovery×0.20)
+  Clamp the result to the range [1, 10] before rounding.
+  Example: training_quality=7, volume_balance=6, consistency=5, recovery=4
+    → 7×0.35 + 6×0.25 + 5×0.20 + 4×0.20 = 2.45 + 1.50 + 1.00 + 0.80 = 5.75 → overall = 6
+
+### training_quality
   1–2  No workout logged, and training frequency suggests this was not a planned rest day.
   3–4  Light incidental activity only (short walk, <15 min casual movement). No structured session.
   5    Short or low-intensity sport session (<30 min, relaxed pace) or light cardio.
@@ -78,46 +100,86 @@ training_quality
   7    Long or high-intensity sport session (60+ min, competitive pace) OR solid resistance session with normal volume for the split.
   8–9  Strong resistance session (volume above recent baseline, or high intensity) OR an unusually demanding sport session combined with other activity.
   10   Exceptional. Personal record, elite effort. Rare.
-  Note: basketball and volleyball are physically demanding — a full-length game or hard session should score 6–7 minimum. Use avg HR and duration from the Apple Health entry to gauge intensity. Resistance sessions: assess based on exercises, sets, reps, and load in the Workouts section.
+  Note: basketball and volleyball are physically demanding — a full-length game or hard \
+  session should score 6–7 minimum. Use avg HR and duration from the Apple Health entry \
+  to gauge intensity. Resistance sessions: assess based on exercises, sets, reps, and load \
+  in the Workouts section.
 
-recovery
-  Anchor at 5 (HRV and resting HR exactly at 30-day averages).
-  HRV 5–10% above avg → +1. HRV >10% above avg → +2.
-  HRV 5–10% below avg → −1. HRV >10% below avg → −2.
-  Resting HR 3–5 bpm above avg → −1. Resting HR >5 bpm above avg → −2.
-  Both metrics bad simultaneously: floor at 2.
-  If User Notes mention poor sleep, illness, or alcohol — apply an additional −1 to −2 \
-even if sensors look normal (alcohol suppresses HRV; the sensor may not fully capture it).
+### recovery
+  Computed deterministically from % deviation of today's HRV and resting HR versus \
+  the 30-day baselines in the "30-day Baselines" section.
+  Start at 5. Apply each adjustment below independently, then sum, then clamp to [1, 10].
 
-volume_balance
-  Based on Muscle Recovery Status: how recently each major group was trained.
-  10  All push / pull / legs groups hit within the last 7 days.
+  HRV adjustments (% vs baseline):
+    HRV 5–10% above baseline  → +1
+    HRV >10% above baseline   → +2
+    HRV 5–10% below baseline  → −1
+    HRV >10% below baseline   → −2
+
+  Resting HR adjustments — READ THE MEDICATION RULE BELOW FIRST:
+    Resting HR 3–5 bpm above baseline → −1
+    Resting HR >5 bpm above baseline  → −2
+
+  MEDICATION RULE (check the "Medications Logged Today" section before scoring resting HR):
+    If a stimulant medication (Adderall, amphetamine, methylphenidate, or similar) is \
+    listed in "Medications Logged Today", the resting HR elevation is pharmacological, \
+    NOT a recovery signal. In that case: skip both resting HR adjustments entirely. \
+    The HRV adjustments still apply as normal.
+
+  Compounding penalty:
+    If BOTH HRV is below baseline AND resting HR is above baseline (and no stimulant \
+    medication exemption applies) → apply an additional −1.
+
+  User-note penalties:
+    User Notes mention poor sleep, illness → −1 additional.
+    User Notes mention alcohol → −2 additional (alcohol suppresses HRV; sensors may \
+    underreport the impact).
+
+  This formula is strict — do not adjust recovery based on narrative judgement or \
+  training context. Only the inputs listed above move the score.
+
+### volume_balance
+  Based on the Muscle Recovery Status section: how recently each major group was trained.
+  10  All push / pull / legs groups trained within the last 7 days.
   7–8 Minor gap — one group at 8–14 days.
   4–6 Clear neglect — a full category (push, pull, or legs) at 10+ days.
-  1–3 Majority of muscle groups at 14 days (detrained or just starting out).
+  1–3 Majority of muscle groups untrained for 14+ days (detrained or just starting out).
 
-consistency
-  Based on resistance sessions in the 7-Day Training History.
-  1–2  0 resistance sessions in 7 days.
-  3–4  1 resistance session.
-  5–6  2 resistance sessions.
-  7–8  3 resistance sessions.
-  9–10 4+ resistance sessions.
+### consistency
+  Count ONLY resistance sessions sourced from Hevy in the 7-Day Training History.
+  Apple Health cardio workouts (sport sessions, runs, etc.) do NOT count toward consistency.
+  1–2  0 Hevy resistance sessions.
+  3–4  1 Hevy resistance session.
+  5–6  2 Hevy resistance sessions.
+  7–8  3 Hevy resistance sessions.
+  9–10 4+ Hevy resistance sessions.
 
 ## Tone
-You are direct, a little critical, and occasionally funny — but always earned and rooted in the data. Think of a coach who genuinely wants the user to improve and isn't afraid to call out laziness or bad decisions, but also acknowledges when things are actually going well.
+You are direct, a little critical, and occasionally funny — but always earned and rooted \
+in the data. Think of a coach who genuinely wants the user to improve and isn't afraid to \
+call out laziness or bad decisions, but also acknowledges when things are actually going well.
 
-- When the data is bad (skipped sessions, poor recovery, long gaps), be blunt and a little cutting. A dry comment about 14 days without legs is fair game. Make it sting just enough to be motivating.
-- When the user clearly pushed hard or bounced back, acknowledge it specifically — not with empty praise, but with a concrete "this is what good looks like."
-- Humour should be dry and situational, not forced. If the data doesn't call for it, skip it. Never funny at the expense of accuracy.
-- The callout is the one place to be direct and a bit sharp if warranted — this is the line that should make the user want to close the app and go train.
+- When the data is bad (skipped sessions, poor recovery, long gaps), be blunt and a little \
+  cutting. A dry comment about 14 days without legs is fair game. Make it sting just enough \
+  to be motivating.
+- When the user clearly pushed hard or bounced back, acknowledge it specifically — not with \
+  empty praise, but with a concrete "this is what good looks like."
+- Humour should be dry and situational, not forced. If the data doesn't call for it, skip it. \
+  Never funny at the expense of accuracy.
+- The callout is the one place to be direct and a bit sharp if warranted — this is the line \
+  that should make the user want to close the app and go train.
 
 ## Rules
 - Every critique point must reference a specific number from the data. No vague statements.
 - If User Notes are present, weight them heavily — the user knows context sensors miss.
 - If sleep data is absent, explicitly note it in the summary and do not assume good sleep.
 - Callout must be one punchy, specific sentence. If the situation calls for it, make it land.
-- Do not use phrases like "great job", "keep it up", or "well done" unless the data actually justifies a strong reaction.
+- Do not use phrases like "great job", "keep it up", or "well done" unless the data \
+  actually justifies a strong reaction.
+- Do NOT re-analyse or re-score the previous day. The Previous Day Context section is \
+  provided only so you can write continuity-aware prose \
+  (e.g. "bounced back from yesterday's 96 bpm RHR"). \
+  Today's scores are derived solely from today's data and the rubric above.
 
 ---
 
@@ -176,6 +238,7 @@ def _build_prompt(
     snapshot: dict,
     baselines: dict | None,
     history: list[dict] | None = None,
+    prev_analysis: dict | None = None,
 ) -> str:
     lines = [f"Date: {date}", ""]
 
@@ -263,6 +326,30 @@ def _build_prompt(
             if pct is not None:
                 lines.append(f"  {muscle}: {days or '?'}d → {pct:.0f}%")
 
+    # --- Previous day context ---
+    # Positioned here — before 7-Day History — so Claude has continuity context
+    # while it reads the week's sessions, avoiding end-of-prompt anchoring.
+    if prev_analysis:
+        prev_scores  = prev_analysis.get("analysis", {}).get("scores", {})
+        prev_summary = (prev_analysis.get("analysis", {}).get("summary") or "").strip()[:300]
+        prev_date    = prev_analysis.get("date", "")
+        if any(_is_score(v) for v in prev_scores.values()):
+            lines += ["", f"=== Previous Day Context ({prev_date}) ===",
+                      "  (For continuity-aware prose only — do NOT re-score or re-analyse this day.)"]
+            score_parts = []
+            for key, label in [
+                ("overall", "overall"), ("training_quality", "training"),
+                ("recovery", "recovery"), ("volume_balance", "vol_balance"),
+                ("consistency", "consistency"),
+            ]:
+                v = prev_scores.get(key)
+                if _is_score(v):
+                    score_parts.append(f"{label}={v}")
+            if score_parts:
+                lines.append(f"  Scores: {', '.join(score_parts)}")
+            if prev_summary:
+                lines.append(f"  Summary: {prev_summary}")
+
     # --- 7-day training history ---
     if history is not None:
         target = _date.fromisoformat(date)
@@ -340,6 +427,20 @@ def _build_prompt(
             label = SORENESS_LABELS[level] if 0 <= level <= 5 else str(level)
             lines.append(f"  {muscle}: {level}/5 ({label})")
 
+    # --- Medications ---
+    meds_raw = snapshot.get("medications_today")
+    if meds_raw:
+        if isinstance(meds_raw, str):
+            try:
+                meds_raw = json.loads(meds_raw)
+            except Exception:
+                meds_raw = None
+        if meds_raw:
+            lines += ["", "=== Medications Logged Today ==="]
+            for med in meds_raw:
+                lines.append(f"  · {med}")
+            lines.append("  Note: stimulant medications (e.g. Adderall) raise resting HR pharmacologically — see rubric.")
+
     # --- User notes ---
     notes = (snapshot.get("notes") or "").strip()
     if notes:
@@ -354,9 +455,10 @@ def run_analysis(
     snapshot: dict,
     baselines: dict | None = None,
     history: list[dict] | None = None,
-    timeout: int = 120,
+    prev_analysis: dict | None = None,
+    timeout: int = 180,
 ) -> tuple[dict, str]:
-    prompt = _build_prompt(date, snapshot, baselines, history)
+    prompt = _build_prompt(date, snapshot, baselines, history, prev_analysis)
     log.info("[claude_analysis] invoking claude CLI for %s (~%d chars)", date, len(prompt))
 
     result = subprocess.run(
@@ -389,5 +491,39 @@ def run_analysis(
 
     # Strip muscle_fatigue if Claude still returns it — we no longer use it
     parsed.pop("muscle_fatigue", None)
+
+    # --- Post-parse schema validation ---
+    # Log warnings for any deviation so drift is visible in logs immediately.
+    _SCORE_KEYS = {"overall", "training_quality", "recovery", "volume_balance", "consistency"}
+    scores = parsed.get("scores", {})
+    for sk in _SCORE_KEYS:
+        v = scores.get(sk)
+        if v is None:
+            log.warning("[claude_analysis] missing score key '%s' for %s", sk, date)
+        elif not isinstance(v, int) or isinstance(v, bool):
+            log.warning(
+                "[claude_analysis] score '%s' is not an integer (got %r) for %s — coercing",
+                sk, v, date,
+            )
+            scores[sk] = int(round(float(v)))
+        elif not (1 <= v <= 10):
+            log.warning(
+                "[claude_analysis] score '%s' = %r out of range [1,10] for %s — clamping",
+                sk, v, date,
+            )
+            scores[sk] = max(1, min(10, v))
+
+    critique = parsed.get("critique")
+    if not isinstance(critique, list):
+        log.warning("[claude_analysis] 'critique' is not a list for %s (got %r)", date, type(critique))
+    elif len(critique) != 3:
+        log.warning(
+            "[claude_analysis] 'critique' has %d items (expected 3) for %s",
+            len(critique), date,
+        )
+
+    for str_key in ("summary", "callout"):
+        if not isinstance(parsed.get(str_key), str):
+            log.warning("[claude_analysis] '%s' is not a string for %s", str_key, date)
 
     return parsed, raw

@@ -35,7 +35,7 @@ APPLE_HEALTH_COLUMNS = (
     "exercise_minutes", "stand_hours", "distance_mi", "flights_climbed",
     "hrv_ms", "resting_hr", "cardio_recovery", "avg_heart_rate",
     "walking_hr_avg", "sleep_total_min", "sleep_deep_min",
-    "sleep_rem_min", "sleep_awake_min",
+    "sleep_rem_min", "sleep_awake_min", "medications_today",
 )
 
 HEVY_COLUMNS = ("body_weight_kg", "muscle_volume", "workouts")
@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS daily_snapshot (
     muscle_volume       TEXT CHECK (muscle_volume IS NULL OR json_valid(muscle_volume)),
     workouts            TEXT CHECK (workouts IS NULL OR json_valid(workouts)),
     recovery_status     TEXT CHECK (recovery_status IS NULL OR json_valid(recovery_status)),
+    medications_today   TEXT CHECK (medications_today IS NULL OR json_valid(medications_today)),
     apple_health_at     TIMESTAMP,
     hevy_at             TIMESTAMP,
     snapshot_complete   INTEGER NOT NULL DEFAULT 0,
@@ -285,6 +286,7 @@ _SQLITE_MIGRATIONS: list[str] = [
     # Clerk auth migration — stores the Clerk user ID alongside the local row
     "ALTER TABLE users ADD COLUMN clerk_user_id TEXT",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL",
+    "ALTER TABLE daily_snapshot ADD COLUMN medications_today TEXT CHECK (medications_today IS NULL OR json_valid(medications_today))",
 ]
 
 
