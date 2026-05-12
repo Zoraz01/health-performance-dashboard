@@ -143,6 +143,10 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
     Payload shape: {data: {workouts: [...]}}
     Each returned dict has source='apple_health' — no muscle-group volume
     (that comes from Hevy only). All scalars are pulled from {qty, units} wrappers.
+
+    Deduplication: Apple Health can log the same session twice (e.g. Watch app +
+    auto-detected segment). When two workouts share the same name and start within
+    60 seconds of each other, only the longer one is kept.
     """
     raw = payload.get("data", {}).get("workouts") or []
     out = []
@@ -152,6 +156,7 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
             continue
         try:
             workout_date = _local_date(start)
+            start_dt = _parse_dt(start)
         except ValueError:
             log.warning("unparseable workout start: %s", start)
             continue
@@ -163,6 +168,7 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
             "id":              w.get("id"),
             "name":            w.get("name"),
             "start":           start,
+            "_start_dt":       start_dt,
             "end":             w.get("end"),
             "duration_min":    round((w.get("duration") or 0) / 60, 1),
             "active_calories": _qty(w, "activeEnergyBurned"),
@@ -171,7 +177,31 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
             "distance_mi":     _qty(w, "distance"),
             "intensity":       _qty(w, "intensity"),
         })
-    return out
+
+    # Drop shorter duplicate sessions that start within 60 s of a longer same-named entry.
+    deduped: list[dict] = []
+    for candidate in out:
+        absorbed = False
+        for i, existing in enumerate(deduped):
+            if existing["name"] != candidate["name"]:
+                continue
+            delta = abs((existing["_start_dt"] - candidate["_start_dt"]).total_seconds())
+            if delta <= 60:
+                if candidate["duration_min"] > existing["duration_min"]:
+                    deduped[i] = candidate  # replace with the longer session
+                absorbed = True
+                break
+        if not absorbed:
+            deduped.append(candidate)
+
+    for w in deduped:
+        w.pop("_start_dt", None)
+
+    if len(deduped) < len(out):
+        log.info("[apple_health] dedup removed %d duplicate workout(s) for %s",
+                 len(out) - len(deduped), target_date)
+
+    return deduped
 
 
 def extract_hr_samples(workout: dict) -> list[dict]:
@@ -258,16 +288,22 @@ def ingest_workouts(payload: dict, target_date: str) -> list[dict]:
     return workouts
 
 
-def _detect_latest_date(payload: dict) -> str | None:
-    """Return the most recent local date found across all metric entries."""
+def _detect_all_dates(payload: dict) -> set[str]:
+    """Return all local dates found across all metric entries."""
     raw_metrics = payload.get("data", {}).get("metrics") or []
-    dates = set()
+    dates: set[str] = set()
     for m in raw_metrics:
         for e in m.get("data") or []:
             try:
                 dates.add(_local_date(e["date"]))
             except (KeyError, ValueError):
                 pass
+    return dates
+
+
+def _detect_latest_date(payload: dict) -> str | None:
+    """Return the most recent local date found across all metric entries."""
+    dates = _detect_all_dates(payload)
     return max(dates) if dates else None
 
 

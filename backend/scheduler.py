@@ -74,8 +74,7 @@ def compute_recovery_status(target_date: str) -> dict[str, dict]:
 
 
 def _enrich_workouts(raw_workouts: list[dict]) -> list[dict]:
-    """Attach primary_muscle_group, secondary_muscle_groups, and type to each
-    exercise via the SQLite exercise_templates lookup."""
+    """Attach muscle groups, type, and computed duration_min to each workout."""
     enriched = []
     with database.get_sqlite() as conn:
         for workout in raw_workouts:
@@ -91,7 +90,15 @@ def _enrich_workouts(raw_workouts: list[dict]) -> list[dict]:
                     "secondary_muscle_groups": mg["secondary"],
                     "type":                    mg["type"],
                 })
-            enriched.append({**workout, "source": "hevy", "exercises": enriched_exercises})
+            entry = {**workout, "source": "hevy", "exercises": enriched_exercises}
+            # Compute duration from start/end timestamps (Hevy API doesn't provide it)
+            try:
+                start_dt = datetime.fromisoformat(workout["start_time"].replace("Z", "+00:00"))
+                end_dt   = datetime.fromisoformat(workout["end_time"].replace("Z", "+00:00"))
+                entry["duration_min"] = round((end_dt - start_dt).total_seconds() / 60, 1)
+            except (KeyError, ValueError, AttributeError):
+                pass
+            enriched.append(entry)
     return enriched
 
 
@@ -99,15 +106,14 @@ async def nightly_hevy_poll() -> None:
     """
     Runs at 02:00 local time.
 
-    1. Fetch workouts (last 24 h) and latest body weight from Hevy API.
-    2. Save raw payloads to DuckDB.
-    3. Enrich exercises with muscle groups from exercise_templates.
-    4. Compute aggregate muscle volume for the day.
-    5. Write to daily_snapshot via upsert_snapshot_hevy().
-    6. Compute and store recovery status snapshot.
-    7. If snapshot is now complete (Apple Health also arrived):
-       - Populate daily_records with metrics + workout data.
-       - Log that Claude analysis can now run.
+    Fetches the last 24 h of Hevy workouts, groups them by their actual
+    workout date (not the poll date), and writes each group to the correct
+    daily_snapshot. This handles workouts that happen after the previous 2am
+    poll — they are correctly attributed to the day they occurred rather than
+    the day the next poll runs.
+
+    Today always gets a hevy_at stamp (even if no workouts happened) so the
+    snapshot_complete flag can trigger once Apple Health data arrives.
     """
     today = _local_today()
     log.info("[hevy_poll] starting for %s", today)
@@ -122,43 +128,56 @@ async def nightly_hevy_poll() -> None:
     log.info("[hevy_poll] fetched %d workout(s), body_weight=%.2f kg",
              len(raw_workouts), body_weight_kg or 0)
 
-    # Raw blob — errors swallowed inside append_raw_blob
     database.append_raw_blob(
         "raw_hevy_workouts", today,
         {"workouts": raw_workouts, "body_weight_kg": body_weight_kg},
     )
 
-    enriched = _enrich_workouts(raw_workouts)
+    # Group workouts by their actual local workout date, not the poll date.
+    by_date: dict[str, list[dict]] = {}
+    for workout in raw_workouts:
+        start_str = workout.get("start_time", "")
+        try:
+            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            date_str = start_dt.astimezone(LOCAL_TZ).date().isoformat()
+        except (ValueError, AttributeError):
+            log.warning("[hevy_poll] unparseable start_time %r — skipping workout", start_str)
+            continue
+        by_date.setdefault(date_str, []).append(workout)
 
-    for workout in enriched:
-        workout_id = workout.get("id")
-        if workout_id:
-            database.upsert_workout_sets(workout_id, workout.get("exercises") or [])
-            log.info("[hevy_poll] sets stored for workout %s (%s)", workout_id, workout.get("title"))
+    # Always stamp today so snapshot_complete can trigger when Apple Health arrives,
+    # even on rest days when no workouts fell in the 24h window.
+    if today not in by_date:
+        by_date[today] = []
 
-    daily_volume = muscle_map.aggregate_daily_volume(enriched, body_weight_kg)
-    log.info("[hevy_poll] muscle volume: %s",
-             ", ".join(f"{m}:{v:.0f}" for m, v in sorted(daily_volume.items(), key=lambda x: -x[1])))
+    for date_str, date_workouts in sorted(by_date.items()):
+        enriched = _enrich_workouts(date_workouts)
 
-    snapshot_complete = database.upsert_snapshot_hevy(
-        today, body_weight_kg, daily_volume, enriched
-    )
+        for workout in enriched:
+            workout_id = workout.get("id")
+            if workout_id:
+                database.upsert_workout_sets(workout_id, workout.get("exercises") or [])
+                log.info("[hevy_poll] sets stored for workout %s (%s)", workout_id, workout.get("title"))
 
-    recovery = compute_recovery_status(today)
-    database.upsert_snapshot_recovery_status(today, recovery)
+        daily_volume = muscle_map.aggregate_daily_volume(enriched, body_weight_kg)
+        if daily_volume:
+            log.info("[hevy_poll] %s muscle volume: %s", date_str,
+                     ", ".join(f"{m}:{v:.0f}" for m, v in sorted(daily_volume.items(), key=lambda x: -x[1])))
 
-    # Populate daily_records whenever the snapshot is complete and the row is missing.
-    # Checking the record here (not just snapshot_complete) handles the crash-recovery
-    # case where snapshot_complete was set 1 but upsert_daily_record_snapshot never ran.
-    snapshot = database.get_snapshot(today)
-    if snapshot and snapshot.get("snapshot_complete"):
-        if database.get_daily_record(today) is None:
-            database.upsert_daily_record_snapshot(today, snapshot)
-            log.info("[hevy_poll] daily_records populated for %s — ready for Claude", today)
+        database.upsert_snapshot_hevy(date_str, body_weight_kg, daily_volume, enriched)
+
+        recovery = compute_recovery_status(date_str)
+        database.upsert_snapshot_recovery_status(date_str, recovery)
+
+        snapshot = database.get_snapshot(date_str)
+        if snapshot and snapshot.get("snapshot_complete"):
+            if database.get_daily_record(date_str) is None:
+                database.upsert_daily_record_snapshot(date_str, snapshot)
+                log.info("[hevy_poll] daily_records populated for %s — ready for Claude", date_str)
+            else:
+                log.info("[hevy_poll] daily_records already present for %s", date_str)
         else:
-            log.info("[hevy_poll] daily_records already present for %s", today)
-    else:
-        log.info("[hevy_poll] snapshot not yet complete for %s (Apple Health pending)", today)
+            log.info("[hevy_poll] snapshot not yet complete for %s (Apple Health pending)", date_str)
 
 
 async def nightly_claude_analysis() -> None:

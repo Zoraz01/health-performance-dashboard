@@ -1,5 +1,5 @@
 import { useRef, useMemo, useEffect, useState, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas } from '@react-three/fiber'
 import { useGLTF, OrbitControls, Center, Bounds } from '@react-three/drei'
 import * as THREE from 'three'
 import { useTheme } from '../ThemeContext'
@@ -99,14 +99,7 @@ function volumeColor(vol, maxVol) {
   return VOL.high
 }
 
-function Spinner({ target }) {
-  useFrame(() => {
-    if (target.current) target.current.rotation.y += 0.0012
-  })
-  return null
-}
-
-function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin }) {
+function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin, isDragging }) {
   const { scene } = useGLTF(MODEL)
   const hoveredRef = useRef(null)
 
@@ -154,8 +147,8 @@ function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin }) {
           object={scene}
           onPointerOver={(e) => {
             e.stopPropagation()
-            // Skip hover logic for touch — tap (onClick) handles it instead
             if (e.pointerType === 'touch') return
+            if (isDragging?.current) return
             const key = e.object.userData.muscleKey
             if (hoveredRef.current && hoveredRef.current !== e.object) {
               hoveredRef.current.material.emissive.set('#000000')
@@ -170,6 +163,7 @@ function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin }) {
           }}
           onPointerOut={(e) => {
             if (e.pointerType === 'touch') return
+            if (isDragging?.current) return
             if (hoveredRef.current) {
               hoveredRef.current.material.emissive.set('#000000')
               hoveredRef.current.material.emissiveIntensity = 0
@@ -202,8 +196,8 @@ function SceneBg({ isDark }) {
 }
 
 export default function MuscleMap3D({ data }) {
-  const bodyRef = useRef()
   const { isDark } = useTheme()
+  const isDragging = useRef(false)
   const [hover, setHover]   = useState(null)   // mouse-only, cursor-relative
   const [pinned, setPinned] = useState(null)   // tap/click, persists until dismissed
   const [mode, setMode]     = useState('recovery')
@@ -246,8 +240,7 @@ export default function MuscleMap3D({ data }) {
   const legend = mode === 'recovery' ? REC_LEGEND : VOL_LEGEND
 
   return (
-    <div className="relative rounded-2xl ring-1 ring-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 overflow-hidden lg:sticky lg:top-6 h-[400px] lg:h-auto"
-      style={{ aspectRatio: '3 / 4' }}
+    <div className="relative rounded-2xl ring-1 ring-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 overflow-hidden lg:sticky lg:top-6 h-[400px] lg:h-auto lg:aspect-[3/4]"
     >
       {/* Header */}
       <div className="absolute top-0 inset-x-0 z-20 px-4 pt-4 flex items-start justify-between">
@@ -291,19 +284,18 @@ export default function MuscleMap3D({ data }) {
         <directionalLight position={[2, 4, 3]} intensity={1.5} />
         <directionalLight position={[-2, 2, -2]} intensity={0.45} color="#6090ff" />
 
-        <Bounds fit clip observe={false} margin={0.85}>
+        <Bounds fit clip margin={0.85}>
           <Body
-            innerRef={bodyRef}
+            innerRef={null}
             data={data}
             mode={mode}
             maxVol={maxVol}
             onHover={handleHover}
             onUnhover={handleUnhover}
             onPin={handlePin}
+            isDragging={isDragging}
           />
         </Bounds>
-
-        <Spinner target={bodyRef} />
 
         <OrbitControls
           makeDefault
@@ -311,6 +303,10 @@ export default function MuscleMap3D({ data }) {
           enablePan={false}
           minPolarAngle={Math.PI / 2}
           maxPolarAngle={Math.PI / 2}
+          autoRotate
+          autoRotateSpeed={0.5}
+          onStart={() => { isDragging.current = true }}
+          onEnd={() => { isDragging.current = false }}
         />
       </Canvas>
 

@@ -72,6 +72,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 WEBHOOK_SECRET = os.environ["APPLE_HEALTH_WEBHOOK_SECRET"]
+_OWNER_EMAIL   = os.environ.get("OWNER_EMAIL", "").lower().strip()
 
 
 # ---------------------------------------------------------------------------
@@ -144,11 +145,14 @@ def get_current_user(
     if user:
         if not user.get("is_active"):
             raise HTTPException(status_code=401, detail="User inactive")
-        return user
+    else:
+        # First login — fetch email from Clerk and create local record
+        email = auth.get_clerk_user_email(clerk_user_id)
+        user = database.create_user_from_clerk(clerk_user_id, email)
 
-    # First login — fetch email from Clerk and create local record
-    email = auth.get_clerk_user_email(clerk_user_id)
-    user = database.create_user_from_clerk(clerk_user_id, email)
+    if _OWNER_EMAIL and user.get("email", "").lower().strip() != _OWNER_EMAIL:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     return user
 
 
@@ -167,14 +171,17 @@ async def webhook_apple_health_metrics(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    target_date = apple_health._detect_latest_date(payload)
-    if not target_date:
+    dates = apple_health._detect_all_dates(payload)
+    if not dates:
         log.warning("[webhook/apple-health] no date in payload — skipped")
         return {"status": "ok", "ingested": False, "reason": "no date in payload"}
 
-    fields = apple_health.ingest_metrics(payload, target_date)
-    log.info("[webhook/apple-health] %d fields ingested for %s", len(fields), target_date)
-    return {"status": "ok", "date": target_date, "fields_ingested": len(fields)}
+    total_fields = 0
+    for target_date in sorted(dates):
+        fields = apple_health.ingest_metrics(payload, target_date)
+        total_fields += len(fields)
+        log.info("[webhook/apple-health] %d fields ingested for %s", len(fields), target_date)
+    return {"status": "ok", "dates": sorted(dates), "fields_ingested": total_fields}
 
 
 @app.post("/webhook/apple-health-workouts")
@@ -189,7 +196,7 @@ async def webhook_apple_health_workouts(
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     raw = payload.get("data", {}).get("workouts") or []
-    dates = set()
+    dates: set[str] = set()
     for w in raw:
         start = w.get("start")
         if start:
@@ -202,13 +209,13 @@ async def webhook_apple_health_workouts(
         log.warning("[webhook/apple-health-workouts] no workouts in payload — skipped")
         return {"status": "ok", "ingested": False, "reason": "no workouts in payload"}
 
-    target_date = max(dates)
-    workouts = apple_health.ingest_workouts(payload, target_date)
-    log.info(
-        "[webhook/apple-health-workouts] %d workouts ingested for %s",
-        len(workouts), target_date,
-    )
-    return {"status": "ok", "date": target_date, "workouts_ingested": len(workouts)}
+    total_workouts = 0
+    for target_date in sorted(dates):
+        workouts = apple_health.ingest_workouts(payload, target_date)
+        total_workouts += len(workouts)
+        log.info("[webhook/apple-health-workouts] %d workouts ingested for %s",
+                 len(workouts), target_date)
+    return {"status": "ok", "dates": sorted(dates), "workouts_ingested": total_workouts}
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +375,7 @@ async def get_today_checkin(_: dict = Depends(get_current_user)):
 @app.post("/api/checkin")
 async def submit_checkin(request: Request, _: dict = Depends(get_current_user)):
     """
-    Accept today's check-in in one shot.
+    Accept today's check-in in one shot — one submission per day, first wins.
     Body: { date, soreness: {muscle: 0-5, ...}, note: str }
     """
     body     = await request.json()
@@ -378,6 +385,13 @@ async def submit_checkin(request: Request, _: dict = Depends(get_current_user)):
 
     if not date:
         raise HTTPException(status_code=400, detail="date is required")
+
+    # One check-in per day: if soreness or a note already exists, silently skip.
+    existing_soreness = database.get_soreness_for_date(date)
+    existing_snapshot = database.get_snapshot(date) or {}
+    existing_note     = (existing_snapshot.get("notes") or "").strip()
+    if existing_soreness or existing_note:
+        return {"status": "already_checked_in", "date": date}
 
     with database.get_sqlite() as conn:
         for muscle, value in soreness.items():
@@ -456,11 +470,21 @@ async def trigger_hevy_backfill(days: int = Query(default=7, ge=1, le=30), _: di
     return {"status": "ok", "days_requested": days, "dates_written": results}
 
 
+@app.post("/api/workouts/dedup")
+async def dedup_workouts(_: dict = Depends(get_current_user)):
+    """Backfill: apply cross-source dedup to all existing workout arrays in daily_snapshot."""
+    log.info("[api] workout cross-source dedup backfill triggered")
+    changed = database.dedup_existing_workouts()
+    return {"status": "ok", "dates_changed": len(changed), "details": changed}
+
+
 # ---------------------------------------------------------------------------
 # SPA static files — must be registered AFTER all API routes
 # ---------------------------------------------------------------------------
 
 _DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+_DIST_ROOT = _DIST.resolve() if _DIST.exists() else None
 
 if _DIST.exists():
     app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
@@ -468,7 +492,9 @@ if _DIST.exists():
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str = ""):
-        candidate = _DIST / full_path
+        candidate = (_DIST_ROOT / full_path).resolve()
+        if not candidate.is_relative_to(_DIST_ROOT):
+            raise HTTPException(status_code=404)
         if candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(_DIST / "index.html")
+        return FileResponse(_DIST_ROOT / "index.html")

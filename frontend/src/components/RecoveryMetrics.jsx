@@ -94,10 +94,9 @@ function RecoveryCard({ name, value, unit, baseline, betterIsHigher, max, format
 }
 
 const CARDS = [
-  { name: 'HRV',             valueKey: 'hrv_ms',        baseKey: 'hrv_avg',              unit: 'ms',  betterIsHigher: true,  max: 60,  format: v => v.toFixed(1) },
-  { name: 'Resting HR',      valueKey: 'resting_hr',    baseKey: 'resting_hr_avg',       unit: 'bpm', betterIsHigher: false, max: 120 },
-  { name: 'Cardio Recovery', valueKey: 'cardio_recovery',baseKey: 'cardio_recovery_avg', unit: 'bpm', betterIsHigher: false, max: 50,  format: v => v.toFixed(1) },
-  { name: 'Walking HR',      valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140 },
+  { name: 'HRV',        valueKey: 'hrv_ms',        baseKey: 'hrv_avg',             unit: 'ms',  betterIsHigher: true,  max: 60,  format: v => v.toFixed(1) },
+  { name: 'Resting HR', valueKey: 'resting_hr',    baseKey: 'resting_hr_avg',      unit: 'bpm', betterIsHigher: false, max: 120, format: v => Math.round(v) },
+  { name: 'Walking HR', valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140, format: v => Math.round(v) },
 ]
 
 export default function RecoveryMetrics({ data = RECOVERY_FIXTURE }) {
@@ -138,7 +137,7 @@ export default function RecoveryMetrics({ data = RECOVERY_FIXTURE }) {
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 px-5 py-6 text-center">
           <p className="text-slate-400 text-sm">Waiting for Apple Health to sync biometric data.</p>
           <p className="text-slate-600 text-[11px] font-mono mt-1">
-            HRV, resting HR, cardio recovery, and walking HR come via the 4-hour webhook.
+            HRV, resting HR, and walking HR come via the 4-hour webhook.
             No 30-day minimum needed — baselines compute from whatever data exists.
           </p>
         </div>

@@ -234,8 +234,14 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                 </svg>
               </button>
             </div>
-            <div className="overflow-y-auto px-5 py-4">
-              {submitted ? (
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 pb-8">
+              {loading ? (
+                <div className="space-y-4 animate-pulse py-2">
+                  {[48, 64, 48, 64, 48].map((w, i) => (
+                    <div key={i} className="h-2.5 bg-slate-800 rounded" style={{ width: `${w}%` }} />
+                  ))}
+                </div>
+              ) : submitted ? (
                 <CheckedInView logged={submitted} />
               ) : (
                 <>

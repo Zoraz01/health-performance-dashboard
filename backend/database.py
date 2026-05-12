@@ -337,6 +337,100 @@ def append_raw_blob(table: str, date: str, payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Cross-source workout deduplication
+# ---------------------------------------------------------------------------
+
+def _parse_workout_start(w: dict) -> datetime | None:
+    """Parse start datetime from either a Hevy or Apple Health workout dict."""
+    s = w.get("start_time") or w.get("start")
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(str(s), "%Y-%m-%d %H:%M:%S %z")
+    except ValueError:
+        return None
+
+
+def _cross_source_dedup(workouts: list[dict]) -> list[dict]:
+    """
+    Match apple_health entries to hevy entries whose start times are within
+    5 minutes. When matched, stitch Apple Health biometrics (calories, HR)
+    into the hevy entry and drop the apple_health entry. Hevy wins on exercise
+    data; Apple Health provides the biometric envelope for the full gym session.
+    """
+    hevy_entries = [w for w in workouts if w.get("source") == "hevy"]
+    ah_entries   = [w for w in workouts if w.get("source") == "apple_health"]
+    other        = [w for w in workouts if w.get("source") not in ("hevy", "apple_health")]
+
+    if not hevy_entries or not ah_entries:
+        return workouts
+
+    absorbed: set[int] = set()
+    for ah_idx, ah in enumerate(ah_entries):
+        ah_dt = _parse_workout_start(ah)
+        if ah_dt is None:
+            continue
+        for hevy_w in hevy_entries:
+            hevy_dt = _parse_workout_start(hevy_w)
+            if hevy_dt is None:
+                continue
+            if abs((ah_dt - hevy_dt).total_seconds()) <= 300:
+                for field in ("active_calories", "avg_heart_rate", "max_heart_rate"):
+                    if ah.get(field) is not None:
+                        hevy_w[field] = ah[field]
+                absorbed.add(ah_idx)
+                log.info(
+                    "[dedup] stitched apple_health '%s' → hevy '%s' (Δ%.0fs, %.0f kcal, avg %.0f bpm)",
+                    ah.get("name"), hevy_w.get("title"),
+                    abs((ah_dt - hevy_dt).total_seconds()),
+                    ah.get("active_calories") or 0,
+                    ah.get("avg_heart_rate") or 0,
+                )
+                break
+
+    remaining_ah = [ah for i, ah in enumerate(ah_entries) if i not in absorbed]
+    return other + hevy_entries + remaining_ah
+
+
+def dedup_existing_workouts() -> dict[str, dict]:
+    """
+    One-shot backfill: apply cross-source dedup to every existing
+    daily_snapshot.workouts row. Returns {date: {before, after}} for dates
+    where the array actually changed.
+    """
+    with get_sqlite() as conn:
+        rows = conn.execute(
+            "SELECT date, workouts FROM daily_snapshot WHERE workouts IS NOT NULL"
+        ).fetchall()
+
+    changed: dict[str, dict] = {}
+    with get_sqlite() as conn:
+        for row in rows:
+            date_str = row["date"]
+            try:
+                workouts = json.loads(row["workouts"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(workouts, list) or len(workouts) < 2:
+                continue
+            deduped = _cross_source_dedup(workouts)
+            if len(deduped) != len(workouts):
+                conn.execute(
+                    "UPDATE daily_snapshot SET workouts = ? WHERE date = ?",
+                    (json.dumps(deduped), date_str),
+                )
+                changed[date_str] = {"before": len(workouts), "after": len(deduped)}
+                log.info(
+                    "[dedup_backfill] %s: %d → %d workouts", date_str, len(workouts), len(deduped)
+                )
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # Workout merge helper
 # ---------------------------------------------------------------------------
 
@@ -344,7 +438,7 @@ def replace_workouts_for_source(
     conn: sqlite3.Connection, date: str, source: str, new_entries: list[dict]
 ) -> list[dict]:
     """Read the current workouts JSON for date, drop entries from source,
-    append new_entries, write back. Returns the merged list.
+    append new_entries, cross-source dedup, write back. Returns merged list.
 
     Caller must already hold a get_sqlite() connection.
     """
@@ -360,6 +454,7 @@ def replace_workouts_for_source(
             existing = []
 
     merged = [w for w in existing if w.get("source") != source] + new_entries
+    merged = _cross_source_dedup(merged)
 
     conn.execute(
         "INSERT INTO daily_snapshot (date, workouts) VALUES (?, ?) "

@@ -39,7 +39,7 @@
 
 /* ── Bone palette (light mode) ───────────────────────────────────────────── */
 /* Inverted scale: 50 = darkest text, 950 = page bg (warm cream).           */
-/* Warm off-white background, mocha neutrals, muted sage greens.            */
+/* Warm off-white background, mocha neutrals, vivid saturated accents.      */
 .light {
   --s-50:   20 17 14;
   --s-100:  26 22 18;
@@ -52,26 +52,26 @@
   --s-800:  208 194 174;
   --s-900:  222 210 192;
   --s-950:  234 224 208;
-  --ok-300: 163 196 110;
-  --ok-400: 140 178 78;
-  --ok-500: 108 145 55;
-  --ok-600: 82 112 38;
-  --w-200:  236 198 122;
-  --w-300:  224 178 90;
-  --w-400:  204 152 60;
-  --w-500:  176 126 38;
-  --e-300:  212 130 110;
-  --e-400:  188 86 60;
-  --e-500:  163 64 46;
-  --e-600:  130 44 30;
-  --a1-300: 168 192 200;
-  --a1-400: 120 158 172;
-  --a2-300: 200 162 180;
-  --a2-400: 164 118 142;
-  --a3-300: 224 154 100;
-  --a3-400: 196 122 64;
-  --a4-300: 140 184 168;
-  --a4-400: 94 152 130;
+  --ok-300: 22 163 74;   /* emerald — rich green, readable on cream */
+  --ok-400: 21 128 61;
+  --ok-500: 20 100 48;
+  --ok-600: 15 76 36;
+  --w-200:  253 211 77;  /* amber — bright golden */
+  --w-300:  251 191 36;
+  --w-400:  245 158 11;
+  --w-500:  217 119 6;
+  --e-300:  248 113 88;  /* red — vivid red-orange */
+  --e-400:  239 68 68;
+  --e-500:  220 38 38;
+  --e-600:  185 28 28;
+  --a1-300: 56 189 248;  /* sky — bright blue */
+  --a1-400: 14 165 233;
+  --a2-300: 192 132 252; /* violet — vivid purple */
+  --a2-400: 167 139 250;
+  --a3-300: 251 146 60;  /* orange — vivid orange */
+  --a3-400: 249 115 22;
+  --a4-300: 94 234 212;  /* teal — vivid teal */
+  --a4-400: 45 212 191;
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
@@ -224,7 +224,7 @@ body {
   z-index: 1;
 }
 ::view-transition-new(root) {
-  animation: theme-reveal 4s linear forwards;
+  animation: theme-reveal 3s linear forwards;
   z-index: 2;
 }
 @keyframes theme-reveal {

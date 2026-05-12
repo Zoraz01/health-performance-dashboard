@@ -2,7 +2,7 @@
 
 Personal health performance dashboard. Aggregates Apple Health data, Hevy workout logs, sleep, HRV, and recovery metrics into a single daily readiness view — with Claude AI analysis.
 
-![FitPulse dashboard]()
+![FitPulse dashboard](frontend/src/assets/hero.png)
 
 ## Stack
 

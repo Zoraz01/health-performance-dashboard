@@ -135,6 +135,9 @@ function HevySession({ session }) {
             <div className="text-slate-100 text-[13px] font-semibold">{session.title}</div>
             <div className="text-slate-500 text-[10px] font-mono mt-0.5">
               {fmtDate(session.start_time)} · {fmtDuration(session.duration_min)} · {setCount} sets
+              {session.active_calories != null && ` · ${Math.round(session.active_calories)} kcal`}
+              {session.avg_heart_rate  != null && ` · avg ${Math.round(session.avg_heart_rate)} bpm`}
+              {session.max_heart_rate  != null && ` · max ${Math.round(session.max_heart_rate)} bpm`}
             </div>
           </div>
         </div>
@@ -148,7 +151,36 @@ function HevySession({ session }) {
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-slate-800/60 px-4 pb-4 pt-1">
+        <div className="border-t border-slate-800/60 px-4 pb-4 pt-3">
+          {/* Biometric stats stitched from Apple Health */}
+          {(session.active_calories != null || session.avg_heart_rate != null) && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+              {session.duration_min != null && (
+                <div className="rounded-lg bg-slate-800/60 ring-1 ring-slate-800 px-3 py-2 text-center">
+                  <div className="text-slate-200 text-[13px] font-semibold tabular-nums">{fmtDuration(session.duration_min)}</div>
+                  <div className="text-slate-500 text-[9.5px] uppercase tracking-wider mt-0.5">Duration</div>
+                </div>
+              )}
+              {session.active_calories != null && (
+                <div className="rounded-lg bg-slate-800/60 ring-1 ring-slate-800 px-3 py-2 text-center">
+                  <div className="text-slate-200 text-[13px] font-semibold tabular-nums">{Math.round(session.active_calories)}</div>
+                  <div className="text-slate-500 text-[9.5px] uppercase tracking-wider mt-0.5">kcal</div>
+                </div>
+              )}
+              {session.avg_heart_rate != null && (
+                <div className="rounded-lg bg-slate-800/60 ring-1 ring-slate-800 px-3 py-2 text-center">
+                  <div className="text-slate-200 text-[13px] font-semibold tabular-nums">{Math.round(session.avg_heart_rate)}</div>
+                  <div className="text-slate-500 text-[9.5px] uppercase tracking-wider mt-0.5">Avg HR</div>
+                </div>
+              )}
+              {session.max_heart_rate != null && (
+                <div className="rounded-lg bg-slate-800/60 ring-1 ring-slate-800 px-3 py-2 text-center">
+                  <div className="text-slate-200 text-[13px] font-semibold tabular-nums">{Math.round(session.max_heart_rate)}</div>
+                  <div className="text-slate-500 text-[9.5px] uppercase tracking-wider mt-0.5">Max HR</div>
+                </div>
+              )}
+            </div>
+          )}
           {detailLoading ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
         </div>
       )}
@@ -175,9 +207,9 @@ function AppleSession({ session }) {
 
   const stats = [
     { label: 'Duration',  value: fmtDuration(session.duration_min) },
-    { label: 'Calories',  value: session.active_calories != null ? `${session.active_calories} kcal` : '—' },
-    { label: 'Avg HR',    value: session.avg_heart_rate != null   ? `${session.avg_heart_rate} bpm`  : '—' },
-    { label: 'Max HR',    value: session.max_heart_rate != null   ? `${session.max_heart_rate} bpm`  : '—' },
+    { label: 'Calories',  value: session.active_calories != null ? `${Math.round(session.active_calories)} kcal` : '—' },
+    { label: 'Avg HR',    value: session.avg_heart_rate != null   ? `${Math.round(session.avg_heart_rate)} bpm`  : '—' },
+    { label: 'Max HR',    value: session.max_heart_rate != null   ? `${Math.round(session.max_heart_rate)} bpm`  : '—' },
     { label: 'Distance',  value: session.distance_mi != null      ? `${session.distance_mi.toFixed(1)} mi` : '—' },
   ]
 

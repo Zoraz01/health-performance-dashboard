@@ -159,7 +159,7 @@ function DayDetail({ day, record, loadingRecord }) {
             <StatCell label="Exercise" value={day.exercise_minutes != null ? Math.round(day.exercise_minutes) : null} unit="min" />
             <StatCell label="Stand"    value={day.stand_hours} unit="hrs" />
             <StatCell label="Distance" value={day.distance_mi != null ? day.distance_mi.toFixed(1) : null} unit="mi" />
-            <StatCell label="Flights"  value={day.flights_climbed} unit="" />
+            <StatCell label="Flights"  value={day.flights_climbed != null ? Math.round(day.flights_climbed) : null} unit="" />
             <StatCell label="Weight"   value={day.body_weight_lbs != null ? day.body_weight_lbs.toFixed(1) : null} unit="lbs" />
           </StatGrid>
         </DetailSection>

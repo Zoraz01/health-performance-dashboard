@@ -18,7 +18,6 @@ const TABS = [
   { key: 'active_calories', label: 'Calories',   unit: 'kcal', color: '#fb923c', fmt: v => `${Math.round(v)}` },
   { key: 'hrv_ms',          label: 'HRV',        unit: 'ms',   color: '#a78bfa', fmt: v => v.toFixed(1) },
   { key: 'resting_hr',      label: 'Resting HR', unit: 'bpm',  color: '#f43f5e', fmt: v => Math.round(v).toString() },
-  { key: 'cardio_recovery', label: 'Recovery',   unit: 'bpm',  color: '#2dd4bf', fmt: v => v.toFixed(1) },
   { key: 'body_weight_lbs', label: 'Weight',     unit: 'lbs',  color: '#34d399', fmt: v => v.toFixed(1) },
 ]
 
