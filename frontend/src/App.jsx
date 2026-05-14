@@ -48,13 +48,16 @@ export default function App() {
   const { isDark, toggle } = useTheme()
   const { logout } = useAuth()
   const [todayData, setTodayData] = useState(null)
+  const [loading, setLoading]     = useState(true)
   const [fetchCount, setFetchCount] = useState(0)
 
   useEffect(() => {
+    setLoading(true)
     apiFetch('/api/today')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setTodayData(data) })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [fetchCount])
 
   const refreshToday = () => setFetchCount(c => c + 1)
@@ -239,11 +242,11 @@ export default function App() {
 
             {activeTab === 'Yesterday' && (
               <>
-                <ActivitySummary data={activityData} />
+                <ActivitySummary data={loading ? undefined : activityData} loading={loading} />
                 <ClaudeCard analysis={analysisData} date={analysisDate} onAnalyzed={refreshToday} />
-                <RecoveryMetrics data={recoveryData} />
-                <WorkoutLog sessions={displaySnap?.workouts ?? undefined} />
-                <RecoveryStatus data={displaySnap?.recovery_status ?? undefined} />
+                <RecoveryMetrics data={loading ? undefined : recoveryData} loading={loading} />
+                <WorkoutLog sessions={loading ? undefined : (displaySnap?.workouts ?? null)} loading={loading} />
+                <RecoveryStatus data={loading ? undefined : (displaySnap?.recovery_status ?? null)} loading={loading} />
                 <SleepCard data={sleepData} />
                 <ScoreChart />
               </>

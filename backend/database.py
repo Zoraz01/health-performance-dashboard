@@ -276,17 +276,17 @@ def get_duckdb() -> Generator[duckdb.DuckDBPyConnection, None, None]:
 _SQLITE_MIGRATIONS: list[str] = [
     "ALTER TABLE daily_snapshot ADD COLUMN recovery_status TEXT CHECK (recovery_status IS NULL OR json_valid(recovery_status))",
     "ALTER TABLE daily_snapshot ADD COLUMN notes TEXT",
-    # Multi-user readiness: user_id on data tables. Existing rows default to NULL
-    # (treated as user 1 until backfilled). Enforced in application code, not FK
-    # (SQLite can't add FK constraints via ALTER TABLE).
+    # Multi-user readiness: user_id on data tables.
     "ALTER TABLE daily_snapshot ADD COLUMN user_id INTEGER",
     "ALTER TABLE daily_records  ADD COLUMN user_id INTEGER",
     "CREATE INDEX IF NOT EXISTS idx_daily_snapshot_user ON daily_snapshot(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_daily_records_user  ON daily_records(user_id)",
-    # Clerk auth migration — stores the Clerk user ID alongside the local row
+    # Clerk auth migration
     "ALTER TABLE users ADD COLUMN clerk_user_id TEXT",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL",
     "ALTER TABLE daily_snapshot ADD COLUMN medications_today TEXT CHECK (medications_today IS NULL OR json_valid(medications_today))",
+    # Admin flag — owner bootstrapped at startup via _bootstrap_owner_admin()
+    "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
 ]
 
 
@@ -308,6 +308,27 @@ def init_db() -> None:
                 if "duplicate column" not in str(e).lower():
                     raise
         log.info("SQLite schema ready: %s", SQLITE_PATH)
+
+    _bootstrap_owner_admin()
+
+
+def _bootstrap_owner_admin() -> None:
+    """Ensure the OWNER_EMAIL user is flagged as admin on every startup.
+
+    Safe to call repeatedly — only updates when is_admin=0 to avoid no-ops.
+    Does nothing if OWNER_EMAIL is not set or no matching row exists yet
+    (the row is created on first Clerk login; the next startup will promote it).
+    """
+    owner = os.environ.get("OWNER_EMAIL", "").lower().strip()
+    if not owner:
+        return
+    with get_sqlite() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET is_admin = 1 WHERE email = ? AND is_admin = 0",
+            (owner,),
+        )
+        if cursor.rowcount:
+            log.info("Bootstrapped is_admin=1 for owner %s", owner)
 
 
 # ---------------------------------------------------------------------------
@@ -1187,7 +1208,7 @@ def get_user_by_clerk_id(clerk_user_id: str) -> dict | None:
     """Return the local user row matching a Clerk user ID, or None."""
     with get_sqlite() as conn:
         row = conn.execute(
-            "SELECT id, email, is_active FROM users WHERE clerk_user_id = ?",
+            "SELECT id, email, is_active, is_admin FROM users WHERE clerk_user_id = ?",
             (clerk_user_id,),
         ).fetchone()
     return dict(row) if row else None
@@ -1204,7 +1225,26 @@ def create_user_from_clerk(clerk_user_id: str, email: str | None) -> dict:
             (resolved_email, clerk_user_id),
         )
         row = conn.execute(
-            "SELECT id, email, is_active FROM users WHERE clerk_user_id = ?",
+            "SELECT id, email, is_active, is_admin FROM users WHERE clerk_user_id = ?",
             (clerk_user_id,),
         ).fetchone()
     return dict(row)
+
+
+def set_user_admin(email: str, is_admin: bool) -> bool:
+    """Promote or demote a user by email. Returns True if a row was updated."""
+    with get_sqlite() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET is_admin = ? WHERE email = ?",
+            (1 if is_admin else 0, email.lower().strip()),
+        )
+    return cursor.rowcount > 0
+
+
+def list_users() -> list[dict]:
+    """Return all user rows (id, email, is_active, is_admin, created_at)."""
+    with get_sqlite() as conn:
+        rows = conn.execute(
+            "SELECT id, email, is_active, is_admin, created_at FROM users ORDER BY created_at"
+        ).fetchall()
+    return [dict(r) for r in rows]

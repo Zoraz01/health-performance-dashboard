@@ -1,15 +1,3 @@
-const ACTIVITY_FIXTURE = {
-  date: '2026-05-03',
-  steps: 7366,
-  active_calories: 381,
-  exercise_minutes: 26,
-  stand_hours: 9,
-  stand_goal: 12,
-  distance_mi: 3.22,
-  flights_climbed: 21,
-  hrv_ms: 31.4,
-  resting_hr: 86,
-}
 
 const Icon = {
   Steps: (p) => (
@@ -64,7 +52,44 @@ function Metric({ icon: I, value, sub, label, accent = 'text-slate-400' }) {
   )
 }
 
-export default function ActivitySummary({ data = ACTIVITY_FIXTURE }) {
+function Skeleton() {
+  return (
+    <section className="as-root rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden animate-pulse">
+      {/* Header skeleton */}
+      <div className="px-4 sm:px-5 pt-4 pb-3 flex items-end justify-between flex-wrap gap-x-4 gap-y-2 border-b border-slate-800/60">
+        <div className="space-y-2">
+          <div className="h-2.5 w-16 bg-slate-800 rounded" />
+          <div className="h-7 w-40 bg-slate-800 rounded" />
+        </div>
+        <div className="flex items-center gap-5">
+          <div className="space-y-1.5 text-right">
+            <div className="h-2 w-8 bg-slate-800 rounded ml-auto" />
+            <div className="h-5 w-16 bg-slate-800 rounded" />
+          </div>
+          <div className="space-y-1.5 text-right">
+            <div className="h-2 w-14 bg-slate-800 rounded ml-auto" />
+            <div className="h-5 w-16 bg-slate-800 rounded" />
+          </div>
+        </div>
+      </div>
+      {/* Metric tiles skeleton */}
+      <div className="as-strip grid gap-y-1 px-1 py-1">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="flex items-start gap-2 px-2 py-3">
+            <div className="mt-1 w-[18px] h-[18px] bg-slate-800 rounded shrink-0" />
+            <div className="space-y-2 flex-1">
+              <div className="h-5 w-14 bg-slate-800 rounded" />
+              <div className="h-2 w-10 bg-slate-800 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function ActivitySummary({ data, loading }) {
+  if (loading || !data) return <Skeleton />
   const dateStr = new Date(data.date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'short', day: 'numeric',
   })

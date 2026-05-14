@@ -50,16 +50,16 @@ launchctl load  ~/Library/LaunchAgents/com.zoraz.health-dashboard.plist
 The launchd service writes stdout/stderr to:
 
 ```text
-backend/test_logs/launchd.out.log
-backend/test_logs/launchd.err.log
+backend/logs/launchd.out.log
+backend/logs/launchd.err.log
 ```
 
 Watch them live:
 
 ```bash
-tail -f backend/test_logs/launchd.out.log
+tail -f backend/logs/launchd.out.log
 # or both streams together:
-tail -f backend/test_logs/launchd.out.log backend/test_logs/launchd.err.log
+tail -f backend/logs/launchd.out.log backend/logs/launchd.err.log
 ```
 
 To run the backend **interactively** with logs printed to your terminal (useful for debugging):

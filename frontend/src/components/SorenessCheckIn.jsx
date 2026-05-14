@@ -83,16 +83,16 @@ function ScaleLegend() {
   )
 }
 
-function CheckedInView({ logged, date }) {
+function CheckedInView({ logged, date, onClose }) {
   const soreness = logged.soreness ?? logged
   const note     = logged.note ?? null
   const nonZero  = Object.entries(soreness).filter(([, v]) => v > 0)
   const allClear = nonZero.length === 0
 
   return (
-    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
+    <div className="p-5 sm:p-6">
       <div className="flex items-center gap-3 mb-5">
-        <div className="w-8 h-8 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25 grid place-items-center shrink-0">
+        <div className="w-9 h-9 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25 grid place-items-center shrink-0">
           <svg viewBox="0 0 14 14" className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2.5 7.5l3 3 6-6" />
           </svg>
@@ -126,10 +126,19 @@ function CheckedInView({ logged, date }) {
         </div>
       )}
 
-      <p className="text-slate-400 text-[11px] mt-5 font-mono uppercase tracking-wider">
+      <p className="text-slate-500 text-[11px] mt-4 font-mono uppercase tracking-wider">
         Come back tomorrow to log again
       </p>
-    </section>
+
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="mt-5 w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors"
+        >
+          Done
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -180,7 +189,11 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
         <div className="h-2 w-24 bg-slate-800/60 rounded" />
       </section>
     )
-    if (submitted) return <CheckedInView logged={submitted} date={today || '—'} />
+    if (submitted) return (
+      <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800">
+        <CheckedInView logged={submitted} date={today || '—'} />
+      </section>
+    )
     return (
       <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
         <div className="flex items-baseline justify-between mb-4">
@@ -222,21 +235,33 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
       )}
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+        <div className={`fixed inset-0 z-50 flex justify-center p-4 ${
+          submitted ? 'items-center' : 'items-end sm:items-center'
+        }`}>
           <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative z-10 w-full max-w-lg max-h-[85vh] flex flex-col bg-slate-900 ring-1 ring-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
-              <div>
-                <h2 className="text-slate-100 text-sm font-semibold">Daily Soreness Check-in</h2>
-                <p className="text-slate-500 text-[10.5px] mt-0.5 uppercase tracking-wider">Rate 0–5 per muscle group</p>
+          <div className={`relative z-10 w-full max-w-lg flex flex-col bg-slate-900 ring-1 ring-slate-700 shadow-2xl ${
+            submitted
+              ? 'rounded-2xl'
+              : 'max-h-[85vh] rounded-t-2xl sm:rounded-2xl'
+          }`}>
+            {/* Header — hidden when submitted (Done button replaces it) */}
+            {!submitted && (
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
+                <div>
+                  <h2 className="text-slate-100 text-sm font-semibold">Daily Soreness Check-in</h2>
+                  <p className="text-slate-500 text-[10.5px] mt-0.5 uppercase tracking-wider">Rate 0–5 per muscle group</p>
+                </div>
+                <button onClick={closeModal} className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center transition-colors">
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                    <path d="M2 2l8 8M10 2l-8 8" />
+                  </svg>
+                </button>
               </div>
-              <button onClick={closeModal} className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center transition-colors">
-                <svg viewBox="0 0 12 12" className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                  <path d="M2 2l8 8M10 2l-8 8" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 pb-8">
+            )}
+
+            <div className={`${
+              submitted ? '' : 'flex-1 min-h-0 overflow-y-auto'
+            } px-5 py-4 pb-6`}>
               {loading ? (
                 <div className="space-y-4 animate-pulse py-2">
                   {[48, 64, 48, 64, 48].map((w, i) => (
@@ -244,7 +269,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                   ))}
                 </div>
               ) : submitted ? (
-                <CheckedInView logged={submitted} date={today} />
+                <CheckedInView logged={submitted} date={today} onClose={closeModal} />
               ) : (
                 <>
                   <ScaleLegend />

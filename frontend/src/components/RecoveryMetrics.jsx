@@ -99,7 +99,38 @@ const CARDS = [
   { name: 'Walking HR', valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140, format: v => Math.round(v) },
 ]
 
-export default function RecoveryMetrics({ data = RECOVERY_FIXTURE }) {
+function Skeleton() {
+  return (
+    <section className="animate-pulse">
+      <div className="flex items-baseline justify-between mb-3 px-1">
+        <div className="h-3.5 w-32 bg-slate-800 rounded" />
+        <div className="h-2.5 w-24 bg-slate-800 rounded" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="space-y-1.5">
+                <div className="h-2.5 w-16 bg-slate-800 rounded" />
+                <div className="h-2 w-20 bg-slate-800 rounded" />
+              </div>
+              <div className="h-5 w-14 bg-slate-800 rounded-full" />
+            </div>
+            <div className="h-8 w-20 bg-slate-800 rounded" />
+            <div className="h-1 w-full bg-slate-800 rounded-full mt-3" />
+            <div className="flex items-center gap-1.5 mt-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+              <div className="h-2.5 w-16 bg-slate-800 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function RecoveryMetrics({ data, loading }) {
+  if (loading || !data) return <Skeleton />
   const missing = CARDS.filter(c => data[c.valueKey] == null || data[c.baseKey] == null)
     .map(c => c.name)
   const hasAny = missing.length < CARDS.length

@@ -157,6 +157,13 @@ def get_current_user(
     return user
 
 
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Stricter gate — only users with is_admin=1 in the DB can reach /api/admin/* routes."""
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Webhooks
 # ---------------------------------------------------------------------------
@@ -512,6 +519,66 @@ async def trigger_analysis(date: str, _: dict = Depends(get_current_user)):
     database.upsert_daily_record_analysis(date, parsed, raw, force=True)
     log.info("[api/analyze] analysis written for %s", date)
     return {"status": "ok", "date": date, "analysis": parsed}
+
+
+# ---------------------------------------------------------------------------
+# Admin — /api/admin/* (require_admin gate)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/admin/me")
+async def admin_me(user: dict = Depends(require_admin)):
+    """Returns the current admin user's identity. 403 if not admin."""
+    return {"is_admin": True, "email": user.get("email"), "id": user.get("id")}
+
+
+@app.get("/api/admin/logs")
+async def get_admin_logs(
+    lines: int = Query(default=300, ge=1, le=2000),
+    _: dict = Depends(require_admin),
+):
+    """Return the last N lines from the backend log files, sorted by timestamp."""
+    import re
+    entries = []
+    for path, stream in [
+        (LOG_DIR / "launchd.err.log", "stderr"),
+        (LOG_DIR / "launchd.out.log", "stdout"),
+    ]:
+        if path.exists():
+            for raw_line in path.read_text(errors="replace").splitlines():
+                line = raw_line.strip()
+                if line:
+                    entries.append({"stream": stream, "line": line})
+    # Lines that start with an ISO timestamp sort correctly lexicographically.
+    entries.sort(key=lambda e: e["line"][:26])
+    return entries[-lines:]
+
+
+@app.get("/api/admin/users")
+async def list_admin_users(_: dict = Depends(require_admin)):
+    """List all registered users with their admin status."""
+    return database.list_users()
+
+
+@app.post("/api/admin/users/{email}/promote")
+async def promote_user(email: str, actor: dict = Depends(require_admin)):
+    """Grant is_admin=1 to the user with the given email."""
+    updated = database.set_user_admin(email, True)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"No user found with email {email!r}")
+    log.info("[admin] %s promoted %s to admin", actor.get("email"), email)
+    return {"status": "ok", "email": email, "is_admin": True}
+
+
+@app.post("/api/admin/users/{email}/demote")
+async def demote_user(email: str, actor: dict = Depends(require_admin)):
+    """Revoke admin from the user with the given email. Cannot self-demote."""
+    if email.lower().strip() == actor.get("email", "").lower().strip():
+        raise HTTPException(status_code=400, detail="Cannot demote yourself")
+    updated = database.set_user_admin(email, False)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"No user found with email {email!r}")
+    log.info("[admin] %s demoted %s from admin", actor.get("email"), email)
+    return {"status": "ok", "email": email, "is_admin": False}
 
 
 # ---------------------------------------------------------------------------

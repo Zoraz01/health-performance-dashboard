@@ -263,7 +263,37 @@ function AppleSession({ session }) {
   )
 }
 
-export default function WorkoutLog({ sessions = SESSIONS_FIXTURE }) {
+function Skeleton() {
+  return (
+    <section className="animate-pulse">
+      <div className="flex items-baseline justify-between mb-3 px-1">
+        <div className="h-3.5 w-20 bg-slate-800 rounded" />
+        <div className="h-2.5 w-16 bg-slate-800 rounded" />
+      </div>
+      <div className="space-y-2.5">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 w-8 h-8 rounded-lg bg-slate-800 ring-1 ring-slate-700/60" />
+                <div className="space-y-1.5">
+                  <div className="h-3 w-28 bg-slate-800 rounded" />
+                  <div className="h-2 w-40 bg-slate-800 rounded" />
+                </div>
+              </div>
+              <div className="w-3 h-3 rounded bg-slate-800 shrink-0" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function WorkoutLog({ sessions, loading }) {
+  if (loading) return <Skeleton />
+  // null means loaded but no workouts → rest day
+  // undefined (pre-load) already handled by loading flag above
   if (!sessions?.length) {
     return (
       <section>

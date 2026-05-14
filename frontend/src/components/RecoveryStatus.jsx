@@ -39,7 +39,38 @@ function StatusChip({ count, label, theme }) {
   )
 }
 
-export default function RecoveryStatus({ data = RECOVERY_FIXTURE }) {
+function Skeleton() {
+  const rows = [80, 55, 65, 90, 45, 70, 60]
+  return (
+    <section className="animate-pulse">
+      <div className="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
+        <div className="h-3.5 w-32 bg-slate-800 rounded" />
+        <div className="flex items-center gap-1.5">
+          <div className="h-5 w-16 bg-slate-800 rounded-full" />
+          <div className="h-5 w-20 bg-slate-800 rounded-full" />
+          <div className="h-5 w-12 bg-slate-800 rounded-full" />
+        </div>
+      </div>
+      <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden divide-y divide-slate-800/50">
+        {rows.map((w, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+            <div className="w-24 shrink-0 space-y-1.5">
+              <div className={`h-3 bg-slate-800 rounded`} style={{ width: `${w}%` }} />
+              <div className="h-2 w-8 bg-slate-800 rounded" />
+            </div>
+            <div className="flex-1 h-1.5 rounded-full bg-slate-800" />
+            <div className="w-10 flex justify-end shrink-0">
+              <div className="h-2.5 w-7 bg-slate-800 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function RecoveryStatus({ data, loading }) {
+  if (loading || !data) return <Skeleton />
   const entries = Object.entries(data).sort((a, b) => a[1].recovery_pct - b[1].recovery_pct)
 
   let fatigued = 0, recovering = 0, ready = 0
