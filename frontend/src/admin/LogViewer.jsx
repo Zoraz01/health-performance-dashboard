@@ -46,7 +46,7 @@ function LogLine({ entry, isDark }) {
         title={fullTs ?? ''}
       >
         {shortTs ? (
-          <span className={`${tsColor} font-mono text-[11px] tabular-nums select-none`}>
+          <span className={`${tsColor} font-mono text-[11px] tabular-nums`}>
             {shortTs}
           </span>
         ) : (

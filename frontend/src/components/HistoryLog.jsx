@@ -170,7 +170,7 @@ function DayDetail({ day, record, loadingRecord }) {
         <DetailSection title="Recovery">
           <StatGrid>
             <StatCell label="HRV"        value={day.hrv_ms != null ? day.hrv_ms.toFixed(1) : null}            unit="ms" />
-            <StatCell label="Resting HR" value={day.resting_hr}                                                unit="bpm" />
+            <StatCell label="Resting HR" value={day.resting_hr != null ? Math.round(day.resting_hr) : null}                                                unit="bpm" />
             <StatCell label="Cardio Rec" value={day.cardio_recovery != null ? day.cardio_recovery.toFixed(1) : null} unit="bpm" />
             <StatCell label="Walking HR" value={day.walking_hr_avg != null ? Math.round(day.walking_hr_avg) : null} unit="bpm" />
           </StatGrid>

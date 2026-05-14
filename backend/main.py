@@ -24,6 +24,7 @@ REST (frontend):
 
 import hmac
 import logging
+import logging.config
 import os
 from contextlib import asynccontextmanager
 from datetime import date as date_cls, datetime, timedelta, timezone
@@ -62,15 +63,78 @@ import scheduler as sched
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_DIR / "server.log"),
-        logging.StreamHandler(),
-    ],
-)
+
+class _AccessFilter(logging.Filter):
+    """Drop uvicorn access log records for noisy self-referential paths."""
+    _SKIP = ("/api/admin/logs", "/health")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # uvicorn.access args: (client_addr, method, path, http_ver, status)
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3:
+            path = str(args[2]).split("?")[0]
+            if any(path.startswith(s) for s in self._SKIP):
+                return False
+        return True
+
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "timestamped": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        }
+    },
+    "handlers": {
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": str(LOG_DIR / "server.log"),
+            "formatter": "timestamped",
+        },
+        "stderr": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+            "formatter": "timestamped",
+        },
+        "stdout": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "timestamped",
+        },
+    },
+    "loggers": {
+        # Uvicorn's internal loggers — apply our format so access/error
+        # lines also carry timestamps instead of the bare "INFO: ..." prefix.
+        "uvicorn": {
+            "handlers": ["stderr", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "uvicorn.error": {
+            "handlers": ["stderr", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "uvicorn.access": {
+            "handlers": ["stdout", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["file", "stderr"],
+    },
+})
+
+# Attach noise filter to access logger imperatively — can't self-reference
+# this module inside dictConfig at import time.
+logging.getLogger("uvicorn.access").addFilter(_AccessFilter())
+
 log = logging.getLogger(__name__)
+
 
 WEBHOOK_SECRET = os.environ["APPLE_HEALTH_WEBHOOK_SECRET"]
 _OWNER_EMAIL   = os.environ.get("OWNER_EMAIL", "").lower().strip()

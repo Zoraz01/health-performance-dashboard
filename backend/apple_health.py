@@ -80,15 +80,16 @@ def aggregate_metric(
         return None
 
     if method == "sum":
-        return sum((_val(e) or 0.0) for e in todays)
+        return round(sum((_val(e) or 0.0) for e in todays), 1)
 
     if method == "mean":
         vals = [v for e in todays if (v := _val(e)) is not None]
-        return mean(vals) if vals else None
+        return round(mean(vals), 1) if vals else None
 
     if method == "last":
         todays.sort(key=lambda e: _parse_dt(e["date"]))
-        return _val(todays[-1])
+        val = _val(todays[-1])
+        return round(val, 1) if val is not None else None
 
     if method == "count_positive":
         return sum(1 for e in todays if (_val(e) or 0) > 0)
@@ -357,11 +358,12 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
                 continue
             bucket = by_name.setdefault(name, {})
             for entry in (m.get("data") or []):
-                ts = entry.get("date")
-                if ts:
-                    if ts in bucket and bucket[ts] != entry:
-                        log.debug("[apple_health] ts collision %s / %s — overwriting", name, ts)
-                    bucket[ts] = entry
+                # Use the full entry as the deduplication key to avoid dropping overlapping records
+                # like 'Core' and 'In Bed' sleep stages that start at the exact same timestamp.
+                import json as _json
+                dedup_key = _json.dumps(entry, sort_keys=True)
+                if dedup_key not in bucket:
+                    bucket[dedup_key] = entry
         # Collect medication names logged for this date.
         for med in data.get("medications") or []:
             name = med.get("name") or med.get("title") or ""

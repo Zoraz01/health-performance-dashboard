@@ -119,7 +119,7 @@ export default function ActivitySummary({ data, loading }) {
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-widest text-slate-500">Resting HR</div>
             <div className="text-amber-300 text-base font-semibold tabular-nums">
-              {data.resting_hr ?? '—'} <span className="text-slate-500 text-xs">bpm</span>
+              {data.resting_hr != null ? Math.round(data.resting_hr) : '—'} <span className="text-slate-500 text-xs">bpm</span>
             </div>
           </div>
         </div>
