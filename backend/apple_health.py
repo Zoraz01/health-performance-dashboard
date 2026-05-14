@@ -32,6 +32,8 @@ METRIC_RULES: list[tuple[str, str, str]] = [
     ("heart_rate",                 "mean",           "avg_heart_rate"),
     ("walking_heart_rate_average", "last",           "walking_hr_avg"),
     ("body_mass",                  "last",           "body_weight_kg"),
+    ("blood_oxygen_saturation",    "mean",           "spo2"),
+    ("respiratory_rate",           "mean",           "respiratory_rate"),
 ]
 
 
@@ -196,6 +198,14 @@ def parse_metrics_payload(payload: dict, target_date: str) -> dict:
     sleep_entries = by_name.get("sleep_analysis")
     if sleep_entries:
         out.update(parse_sleep(sleep_entries, target_date))
+
+    # RingConn sends weight as weight_body_mass in lbs; convert to kg as fallback
+    if "body_weight_kg" not in out:
+        rc_weight_entries = by_name.get("weight_body_mass")
+        if rc_weight_entries:
+            val = aggregate_metric(rc_weight_entries, "last", target_date)
+            if val is not None:
+                out["body_weight_kg"] = round(val * 0.453592, 2)
 
     return out
 
@@ -391,6 +401,14 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
     sleep_entries = merged.get("sleep_analysis")
     if sleep_entries:
         out.update(parse_sleep(sleep_entries, target_date))
+
+    # RingConn sends weight as weight_body_mass in lbs; convert to kg as fallback
+    if "body_weight_kg" not in out:
+        rc_weight_entries = merged.get("weight_body_mass")
+        if rc_weight_entries:
+            val = aggregate_metric(rc_weight_entries, "last", target_date)
+            if val is not None:
+                out["body_weight_kg"] = round(val * 0.453592, 2)
 
     if all_medications:
         import json as _json

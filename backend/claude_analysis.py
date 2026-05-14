@@ -41,8 +41,10 @@ generic coaching advice.
 ## User profile
 - Training program: Push / Pull / Legs split, targeting 3–4 resistance sessions per week, supplemented by recreational sport
 - Sport activity: plays basketball, volleyball, and similar court/team sports — tracked via Apple Health as cardio workouts. These count as real training load: cardiovascular stress, lower body explosive demand (quads, calves, glutes), and lateral movement. Factor sport sessions into recovery scoring and training quality accordingly.
-- Data sources: Apple Health (steps, HRV, resting HR, cardio recovery, sleep, cardio \
-workouts via Apple Watch) + Hevy app (resistance training: exercises, sets, reps, load in kg)
+- Data sources: Apple Health (steps, HRV, resting HR, cardio recovery, avg heart rate, \
+body weight, sleep, SpO2, cardio workouts) + Hevy app (resistance training: exercises, \
+sets, reps, load in kg). Apple Watch is the primary sensor; a RingConn ring supplements \
+it and will eventually replace it.
 - Goal: Build strength and muscle, improve cardiovascular fitness
 
 ## What you are analyzing
@@ -245,6 +247,7 @@ def _build_prompt(
     for key, label, unit, decimals in [
         ("steps",            "Steps",            "",     0),
         ("active_calories",  "Active Calories",  "kcal", 0),
+        ("avg_heart_rate",   "Avg Heart Rate",   "bpm",  0),
         ("exercise_minutes", "Exercise Minutes", "min",  0),
         ("stand_hours",      "Stand Hours",      "hrs",  0),
         ("distance_mi",      "Distance",         "mi",   1),
@@ -258,10 +261,13 @@ def _build_prompt(
     # --- Recovery ---
     lines += ["", "=== Recovery ==="]
     for key, label, unit, decimals in [
-        ("hrv_ms",          "HRV",             "ms",  1),
-        ("resting_hr",      "Resting HR",      "bpm", 0),
-        ("cardio_recovery", "Cardio Recovery", "bpm", 0),
-        ("walking_hr_avg",  "Walking HR Avg",  "bpm", 0),
+        ("hrv_ms",            "HRV",              "ms",     1),
+        ("resting_hr",        "Resting HR",       "bpm",    0),
+        ("cardio_recovery",   "Cardio Recovery",  "bpm",    0),
+        ("walking_hr_avg",    "Walking HR Avg",   "bpm",    0),
+        ("body_weight_kg",    "Body Weight",      "kg",     1),
+        ("spo2",              "Blood Oxygen",     "%",      1),
+        ("respiratory_rate",  "Respiratory Rate", "br/min", 1),
     ]:
         val = snapshot.get(key)
         if val is not None:
@@ -275,6 +281,7 @@ def _build_prompt(
             ("resting_hr_avg",      "Resting HR Avg", "bpm"),
             ("cardio_recovery_avg", "Cardio Rec Avg", "bpm"),
             ("walking_hr_baseline", "Walking HR Base","bpm"),
+            ("spo2_avg",            "SpO2 Avg",       "%"),
         ]:
             val = baselines.get(key)
             if val is not None:

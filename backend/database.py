@@ -36,6 +36,7 @@ APPLE_HEALTH_COLUMNS = (
     "hrv_ms", "resting_hr", "cardio_recovery", "avg_heart_rate",
     "walking_hr_avg", "sleep_total_min", "sleep_deep_min",
     "sleep_rem_min", "sleep_awake_min", "medications_today",
+    "spo2", "respiratory_rate",
 )
 
 HEVY_COLUMNS = ("body_weight_kg", "muscle_volume", "workouts")
@@ -287,6 +288,8 @@ _SQLITE_MIGRATIONS: list[str] = [
     "ALTER TABLE daily_snapshot ADD COLUMN medications_today TEXT CHECK (medications_today IS NULL OR json_valid(medications_today))",
     # Admin flag — owner bootstrapped at startup via _bootstrap_owner_admin()
     "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE daily_snapshot ADD COLUMN spo2 REAL",
+    "ALTER TABLE daily_snapshot ADD COLUMN respiratory_rate REAL",
 ]
 
 
@@ -1066,7 +1069,8 @@ def get_metric_baselines(days: int = 30) -> dict:
                 AVG(hrv_ms)          AS hrv_avg,
                 AVG(resting_hr)      AS resting_hr_avg,
                 AVG(cardio_recovery) AS cardio_recovery_avg,
-                AVG(walking_hr_avg)  AS walking_hr_baseline
+                AVG(walking_hr_avg)  AS walking_hr_baseline,
+                AVG(spo2)            AS spo2_avg
             FROM daily_snapshot
             WHERE date >= date('now', ? || ' days')
               AND date < date('now')
