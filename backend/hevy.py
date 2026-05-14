@@ -83,9 +83,12 @@ async def fetch_latest_body_weight() -> float | None:
         )
         measurements = data.get("body_measurements", [])
         if not measurements:
+            log.info("[hevy] no body measurements found")
             return None
         # API returns newest-first; take the first entry
-        return measurements[0].get("weight_kg")
+        weight = measurements[0].get("weight_kg")
+        log.info("[hevy] latest body weight: %.2f kg (%.1f lbs)", weight, weight * 2.20462 if weight else 0)
+        return weight
 
 
 async def fetch_workouts_since(since: datetime | None = None) -> list[dict]:
@@ -126,6 +129,7 @@ async def fetch_workouts_since(since: datetime | None = None) -> list[dict]:
                 break
             page += 1
 
+    log.info("[hevy] fetch_workouts_since(%s): %d workout(s) found", since.date(), len(workouts))
     return workouts
 
 

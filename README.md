@@ -45,6 +45,20 @@ launchctl unload ~/Library/LaunchAgents/com.zoraz.health-dashboard.plist
 launchctl load  ~/Library/LaunchAgents/com.zoraz.health-dashboard.plist
 ```
 
+## Admin Panel
+
+The admin log viewer is available at:
+
+```
+https://health.zorazhaseeb.com/admin/logs
+```
+
+Or locally: `http://localhost:8100/admin/logs`
+
+Requires an account with `is_admin = 1` in the database. The `OWNER_EMAIL` from `.env` is automatically promoted on every backend startup. Non-admin users see an access denied page.
+
+> **Note on log history**: `launchd.err.log` and `launchd.out.log` are append-only. The log viewer shows the full file history — including Python tracebacks from previous crashes (visible as `~~~^^^` caret underlines in Python 3.14's enhanced traceback format). These are historical, not current errors. The service is healthy as long as `Application startup complete.` appears near the bottom.
+
 ## Viewing live logs
 
 The launchd service writes stdout/stderr to:

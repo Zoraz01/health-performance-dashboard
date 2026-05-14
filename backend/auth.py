@@ -30,11 +30,14 @@ def _load_jwks() -> None:
     """Fetch JWKS from the pinned issuer and populate the key cache."""
     global _cache_loaded_at
     url = f"{CLERK_ISSUER}/.well-known/jwks.json"
+    log.info("[auth] fetching JWKS from %s", url)
     resp = httpx.get(url, timeout=5)
     resp.raise_for_status()
-    for key_data in resp.json().get("keys", []):
+    keys = resp.json().get("keys", [])
+    for key_data in keys:
         _key_cache[key_data["kid"]] = RSAAlgorithm.from_jwk(json.dumps(key_data))
     _cache_loaded_at = time.monotonic()
+    log.info("[auth] JWKS loaded — %d key(s) cached", len(keys))
 
 
 def verify_clerk_token(token: str) -> dict:
@@ -49,6 +52,8 @@ def verify_clerk_token(token: str) -> dict:
 
     cache_stale = (time.monotonic() - _cache_loaded_at) > _CACHE_TTL
     if kid not in _key_cache or cache_stale:
+        reason = "stale" if cache_stale else "kid miss"
+        log.debug("[auth] JWKS cache %s — reloading", reason)
         _load_jwks()
 
     public_key = _key_cache.get(kid)
@@ -64,7 +69,7 @@ def verify_clerk_token(token: str) -> dict:
         public_key,
         algorithms=["RS256"],
         options={"verify_aud": False},
-        issuer=CLERK_ISSUER,  # pyjwt validates the iss claim matches
+        issuer=CLERK_ISSUER,
     )
 
 
@@ -83,7 +88,11 @@ def get_clerk_user_email(clerk_user_id: str) -> str | None:
             primary_id = data.get("primary_email_address_id")
             for addr in data.get("email_addresses", []):
                 if addr["id"] == primary_id:
-                    return addr["email_address"]
+                    email = addr["email_address"]
+                    log.info("[auth] resolved email for %s: %s", clerk_user_id, email)
+                    return email
+        else:
+            log.warning("[auth] Clerk user lookup returned %d for %s", resp.status_code, clerk_user_id)
     except Exception as exc:
         log.warning("Could not fetch Clerk user email for %s: %s", clerk_user_id, exc)
     return None

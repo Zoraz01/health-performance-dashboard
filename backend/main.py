@@ -150,6 +150,7 @@ def get_current_user(
         # First login — fetch email from Clerk and create local record
         email = auth.get_clerk_user_email(clerk_user_id)
         user = database.create_user_from_clerk(clerk_user_id, email)
+        log.info("[auth] first login — created user %s (clerk_id=%s)", email, clerk_user_id)
 
     if _OWNER_EMAIL and user.get("email", "").lower().strip() != _OWNER_EMAIL:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -160,6 +161,7 @@ def get_current_user(
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
     """Stricter gate — only users with is_admin=1 in the DB can reach /api/admin/* routes."""
     if not user.get("is_admin"):
+        log.warning("[auth] admin access denied for %s", user.get("email"))
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
@@ -304,9 +306,9 @@ async def get_today(_: dict = Depends(get_current_user)):
     today     = datetime.now(sched.LOCAL_TZ).date().isoformat()
     yesterday = (date_cls.fromisoformat(today) - timedelta(days=1)).isoformat()
 
-    # Analysis runs at 2am for the previous day, so fall back to yesterday's
-    # record when today hasn't been analyzed yet (normal state during the day).
     record = database.get_daily_record(today) or database.get_daily_record(yesterday)
+    record_date = record.get("date") if record else None
+    log.debug("[api/today] serving %s, record_date=%s", today, record_date)
 
     return {
         "date":               today,
@@ -422,6 +424,7 @@ async def log_soreness(request: Request, _: dict = Depends(get_current_user)):
             "soreness = excluded.soreness, logged_at = CURRENT_TIMESTAMP",
             (date, muscle, soreness_int),
         )
+    log.info("[api/soreness] %s → %s = %d", date, muscle, soreness_int)
     return {"status": "ok", "date": date, "muscle": muscle, "soreness": soreness_int}
 
 
@@ -479,6 +482,7 @@ async def submit_checkin(request: Request, _: dict = Depends(get_current_user)):
     if note:
         database.upsert_snapshot_notes(date, note)
 
+    log.info("[api/checkin] %s — %d muscle(s), note=%s", date, len(soreness), bool(note))
     return {"status": "ok", "date": date,
             "muscles_logged": len(soreness), "note_saved": bool(note)}
 
