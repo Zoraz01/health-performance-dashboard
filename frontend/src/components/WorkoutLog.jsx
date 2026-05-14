@@ -141,7 +141,7 @@ function HevySession({ session }) {
               )}
             </div>
           )}
-          {loadingRef.current ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
+          {expanded && detail === null ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
         </div>
       )}
     </div>
@@ -200,7 +200,7 @@ function AppleSession({ session }) {
       </button>
       {expanded && (
         <div className="border-t border-slate-800/60 px-4 pb-4 pt-3">
-          {hrLoading ? (
+          {expanded && hrData === null ? (
             <div className="space-y-2 animate-pulse">
               <div className="h-24 bg-slate-800 rounded" />
               <div className="h-14 bg-slate-800 rounded" />
