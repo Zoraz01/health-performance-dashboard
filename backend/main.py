@@ -542,6 +542,7 @@ async def get_admin_logs(
 ):
     """Return the last N lines from the backend log files, sorted by timestamp."""
     import re
+    _TS = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
     entries = []
     for path, stream in [
         (LOG_DIR / "launchd.err.log", "stderr"),
@@ -552,8 +553,29 @@ async def get_admin_logs(
                 line = raw_line.strip()
                 if line:
                     entries.append({"stream": stream, "line": line})
-    # Lines that start with an ISO timestamp sort correctly lexicographically.
-    entries.sort(key=lambda e: e["line"][:26])
+
+    # Assign a sort key to each line.
+    # Lines with an ISO timestamp sort by that timestamp.
+    # Continuation lines (tracebacks, ~~~^^^, etc.) inherit the last seen
+    # timestamp so they stay grouped with their parent entry rather than
+    # floating to the end (~ is ASCII 126, after all letters/digits).
+    last_ts = "0000-00-00 00:00:00"
+    last_idx = 0
+    for i, e in enumerate(entries):
+        m = _TS.match(e["line"])
+        if m:
+            last_ts = e["line"][:19]
+            last_idx = 0
+        else:
+            last_idx += 1
+        # Tie-break with a zero-padded counter so continuations stay in
+        # original file order under the same timestamp.
+        e["_sort"] = f"{last_ts}_{last_idx:06d}"
+
+    entries.sort(key=lambda e: e["_sort"])
+    # Strip internal sort key before returning
+    for e in entries:
+        del e["_sort"]
     return entries[-lines:]
 
 
