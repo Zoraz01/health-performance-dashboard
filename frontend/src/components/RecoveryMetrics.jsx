@@ -1,13 +1,3 @@
-const RECOVERY_FIXTURE = {
-  hrv_ms: 31.4,
-  hrv_avg: 38.2,
-  resting_hr: 86,
-  resting_hr_avg: 79,
-  cardio_recovery: 23.7,
-  cardio_recovery_avg: 26.5,
-  walking_hr_avg: 97,
-  walking_hr_baseline: 92,
-}
 
 function TrendArrow({ dir, className = '' }) {
   return (

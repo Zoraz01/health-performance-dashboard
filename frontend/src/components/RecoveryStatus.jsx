@@ -1,19 +1,3 @@
-const RECOVERY_FIXTURE = {
-  lats:       { days_since_trained: 0, recovery_pct: 0   },
-  upper_back: { days_since_trained: 0, recovery_pct: 0   },
-  biceps:     { days_since_trained: 0, recovery_pct: 0   },
-  forearms:   { days_since_trained: 0, recovery_pct: 0   },
-  chest:      { days_since_trained: 1, recovery_pct: 33  },
-  shoulders:  { days_since_trained: 1, recovery_pct: 33  },
-  triceps:    { days_since_trained: 1, recovery_pct: 33  },
-  quadriceps: { days_since_trained: 9, recovery_pct: 100 },
-  hamstrings: { days_since_trained: 9, recovery_pct: 100 },
-  glutes:     { days_since_trained: 9, recovery_pct: 100 },
-  calves:     { days_since_trained: 9, recovery_pct: 100 },
-  abdominals: { days_since_trained: 4, recovery_pct: 100 },
-  lower_back: { days_since_trained: 4, recovery_pct: 100 },
-  traps:      { days_since_trained: 4, recovery_pct: 100 },
-}
 
 function pretty(key) {
   return key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')

@@ -109,7 +109,7 @@ function WarningIcon({ className = '' }) {
 function ClaudeMark() {
   return (
     <div className="relative w-7 h-7 shrink-0">
-      <div className="absolute inset-0 rounded-md bg-gradient-to-br from-amber-300/90 to-orange-500/80" />
+      <div className="absolute inset-0 rounded-md bg-linear-to-br from-amber-300/90 to-orange-500/80" />
       <div className="absolute inset-0 grid place-items-center">
         <svg viewBox="0 0 16 16" className="w-4 h-4 text-slate-950" fill="currentColor">
           {/* 4-point sparkle — universally reads as AI/generated */}
@@ -207,7 +207,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
   )
 
   return (
-    <section className="rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7 shadow-2xl shadow-black/30">
+    <section className="rounded-2xl bg-linear-to-b from-slate-900/90 to-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7 shadow-2xl shadow-black/30">
       <header className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <ClaudeMark />
@@ -257,7 +257,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
       )}
 
       {analysis.callout && (
-        <blockquote className="relative rounded-lg bg-amber-500/[0.06] border-l-2 border-amber-400 pl-4 pr-4 py-3.5 mb-6">
+        <blockquote className="relative rounded-lg bg-amber-500/6 border-l-2 border-amber-400 pl-4 pr-4 py-3.5 mb-6">
           <p className="text-[14px] leading-relaxed text-slate-100 font-medium">
             {analysis.callout}
           </p>

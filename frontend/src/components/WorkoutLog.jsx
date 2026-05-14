@@ -1,47 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import WorkoutSetLog from './WorkoutSetLog'
 import WorkoutHRChart from './WorkoutHRChart'
 
-const SESSIONS_FIXTURE = [
-  {
-    source: 'hevy',
-    id: 'b7ac6bac-fd67-4dca-ba39-23056ae7c254',
-    title: 'Pull',
-    start_time: '2026-05-03T20:38:00+00:00',
-    duration_min: 40.1,
-    exercises: [
-      { title: 'Pull Up',                          primary_muscle_group: 'lats',       sets: [{ weight_kg: null,  reps: 10 }, { weight_kg: null,  reps: 10 }, { weight_kg: null,  reps: 9  }] },
-      { title: 'Bent Over Row (Barbell)',           primary_muscle_group: 'upper_back', sets: [{ weight_kg: 61.24, reps: 10 }, { weight_kg: 61.24, reps: 10 }, { weight_kg: 61.24, reps: 10 }] },
-      { title: 'Reverse Grip Lat Pulldown (Cable)', primary_muscle_group: 'lats',       sets: [{ weight_kg: 65.77, reps: 8  }, { weight_kg: 65.77, reps: 8  }, { weight_kg: 65.77, reps: 8  }] },
-      { title: 'Bicep Curl (Dumbbell)',             primary_muscle_group: 'biceps',     sets: [{ weight_kg: 27.22, reps: 7  }, { weight_kg: 27.22, reps: 8  }] },
-    ],
-  },
-  {
-    source: 'hevy',
-    id: 'push-session-id',
-    title: 'Push',
-    start_time: '2026-05-02T21:00:00+00:00',
-    duration_min: 52.0,
-    exercises: [
-      { title: 'Bench Press (Dumbbell)',       primary_muscle_group: 'chest',     sets: [{ weight_kg: 45.36, reps: 7  }, { weight_kg: 45.36, reps: 7  }, { weight_kg: 45.36, reps: 6  }] },
-      { title: 'Incline Bench Press (Dumbbell)', primary_muscle_group: 'chest',   sets: [{ weight_kg: 45.36, reps: 8  }, { weight_kg: 45.36, reps: 8  }, { weight_kg: 45.36, reps: 7  }] },
-      { title: 'Overhead Press (Dumbbell)',    primary_muscle_group: 'shoulders', sets: [{ weight_kg: 36.29, reps: 6  }, { weight_kg: 36.29, reps: 6  }, { weight_kg: 36.29, reps: 6  }] },
-      { title: 'Lateral Raise (Dumbbell)',     primary_muscle_group: 'shoulders', sets: [{ weight_kg: 11.34, reps: 12 }, { weight_kg: 11.34, reps: 12 }, { weight_kg: 11.34, reps: 10 }, { weight_kg: 11.34, reps: 10 }] },
-      { title: 'Chest Fly (Machine)',          primary_muscle_group: 'chest',     sets: [{ weight_kg: 24.95, reps: 10 }, { weight_kg: 24.95, reps: 10 }, { weight_kg: 24.95, reps: 10 }] },
-    ],
-  },
-  {
-    source: 'apple_health',
-    id: 'walk-session-id',
-    name: 'Outdoor Walk',
-    start: '2026-05-06 19:42:00 -0400',
-    duration_min: 49.1,
-    active_calories: 142,
-    avg_heart_rate: 130,
-    max_heart_rate: 144,
-    distance_mi: 1.74,
-  },
-]
 
 function fmtDuration(min) {
   const h = Math.floor(min / 60)
@@ -83,12 +43,12 @@ function LoadingRows() {
 
 function HevySession({ session }) {
   const [expanded, setExpanded] = useState(false)
-  const [detail, setDetail] = useState(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+  const [detail, setDetail]     = useState(null)
+  const loadingRef              = useRef(false)
 
   useEffect(() => {
-    if (!expanded || detail !== null || detailLoading) return
-    setDetailLoading(true)
+    if (!expanded || detail !== null || loadingRef.current) return
+    loadingRef.current = true
     fetch(`/api/workout/${session.id}/sets`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -113,8 +73,8 @@ function HevySession({ session }) {
           })),
         })
       })
-      .finally(() => setDetailLoading(false))
-  }, [expanded, detail, detailLoading, session])
+      .finally(() => { loadingRef.current = false })
+  }, [expanded, detail, session])
 
   const setCount = (session.exercises ?? []).reduce((sum, ex) => sum + (ex.sets?.length ?? 0), 0)
   const topMuscles = [...new Set((session.exercises ?? []).map(e => e.primary_muscle_group))].slice(0, 3)
@@ -181,7 +141,7 @@ function HevySession({ session }) {
               )}
             </div>
           )}
-          {detailLoading ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
+          {loadingRef.current ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
         </div>
       )}
     </div>
@@ -190,18 +150,18 @@ function HevySession({ session }) {
 
 function AppleSession({ session }) {
   const [expanded, setExpanded] = useState(false)
-  const [hrData, setHrData] = useState(null)
-  const [hrLoading, setHrLoading] = useState(false)
+  const [hrData, setHrData]     = useState(null)
+  const hrLoadingRef            = useRef(false)
 
   useEffect(() => {
-    if (!expanded || hrData !== null || hrLoading) return
-    setHrLoading(true)
+    if (!expanded || hrData !== null || hrLoadingRef.current) return
+    hrLoadingRef.current = true
     fetch(`/api/workout/${session.id}/hr`)
       .then(r => r.ok ? r.json() : { workout_id: session.id, samples: [] })
       .catch(() => ({ workout_id: session.id, samples: [] }))
       .then(data => setHrData(data))
-      .finally(() => setHrLoading(false))
-  }, [expanded, hrData, hrLoading, session])
+      .finally(() => { hrLoadingRef.current = false })
+  }, [expanded, hrData, session])
 
   const name = session.name ?? 'Workout'
 

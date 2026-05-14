@@ -44,7 +44,7 @@ function Metric({ icon: I, value, sub, label, accent = 'text-slate-400' }) {
           {value}
           {sub && <span className="text-slate-500 text-sm font-normal ml-1">{sub}</span>}
         </div>
-        <div className="as-label text-[9.5px] uppercase tracking-[0.1em] text-slate-500 font-medium mt-1 leading-tight">
+        <div className="as-label text-[9.5px] uppercase tracking-widest text-slate-500 font-medium mt-1 leading-tight">
           {label}
         </div>
       </div>

@@ -48,7 +48,7 @@ export default function SleepCard({ data }) {
           </div>
         </div>
 
-        <div className="absolute inset-0 grid place-items-center bg-gradient-to-b from-slate-900/60 via-slate-900/85 to-slate-900/95">
+        <div className="absolute inset-0 grid place-items-center bg-linear-to-b from-slate-900/60 via-slate-900/85 to-slate-900/95">
           <div className="text-center px-6">
             <div className="mx-auto w-10 h-10 rounded-full bg-slate-800 ring-1 ring-slate-700 grid place-items-center mb-3">
               <svg viewBox="0 0 20 20" className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
