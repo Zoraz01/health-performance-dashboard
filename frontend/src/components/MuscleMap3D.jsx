@@ -45,22 +45,22 @@ const MUSCLE_LABELS = {
   upper_arms: 'Upper Arms',
 }
 
-// Recovery mode — green / yellow / red traffic light
+// Recovery mode — rich emerald / amber / rose
 const REC = {
-  ready:   '#22c55e',
-  partial: '#eab308',
-  fatigued:'#ef4444',
-  noData:  '#d1d5db',  // near-white — neutral base
-  hover:   '#fbbf24',
+  ready:   '#10b981',  // emerald-500 — vibrant, natural "good"
+  partial: '#f59e0b',  // amber-500 — warm, readable in both themes
+  fatigued:'#f43f5e',  // rose-500 — vivid, more dramatic than flat red
+  noData:  '#4b5563',  // gray-600 — neutral mid-dark, works in dark + light
+  hover:   '#bfdbfe',  // blue-200 — soft cool glow
 }
 
-// Volume mode
+// Volume mode — cool → mid → warm heatmap
 const VOL = {
-  none: '#d1d5db',
-  low:  '#4bc4e8',
-  mid:  '#eab308',
-  high: '#ef4444',
-  hover:'#fbbf24',
+  none:  '#1e293b',  // slate-800 — near-invisible "untrained"
+  low:   '#22d3ee',  // cyan-400 — cool, clearly "low"
+  mid:   '#a78bfa',  // violet-400 — mid-range bridge
+  high:  '#fb923c',  // orange-400 — warm, clearly "high"
+  hover: '#bfdbfe',  // blue-200 — same soft cool glow
 }
 
 const SCENE_BG = { dark: '#0c242c', light: '#c2b8ac' }
@@ -91,12 +91,30 @@ function recoveryColor(pct) {
   return REC.fatigued
 }
 
-function volumeColor(vol, maxVol) {
+// baseline present → history-relative (≥30 days of data)
+// baseline absent  → relative-to-max within current 30d window
+function volumeColor(vol, baseline, maxVol) {
   if (vol == null || vol === 0) return VOL.none
+  if (baseline != null && baseline > 0) {
+    const t = vol / baseline
+    if (t >= 1.1) return VOL.high
+    if (t >= 0.6) return VOL.mid
+    return VOL.low
+  }
   const t = Math.min(1, vol / Math.max(maxVol, 1))
   if (t < 0.33) return VOL.low
   if (t < 0.66) return VOL.mid
   return VOL.high
+}
+
+function resolveBaseline(key, data) {
+  if (!key || !data) return null
+  const subs = COMPOSITE_MUSCLES[key]
+  if (subs) {
+    const vals = subs.map(k => data[k]?.volumeBaseline).filter(v => v != null)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) : null
+  }
+  return data[key]?.volumeBaseline ?? null
 }
 
 function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin, isDragging }) {
@@ -128,7 +146,7 @@ function Body({ innerRef, data, mode, maxVol, onHover, onUnhover, onPin, isDragg
         const key = node.userData.muscleKey
         let color
         if (mode === 'volume') {
-          color = volumeColor(resolveVol(key, data), maxVol)
+          color = volumeColor(resolveVol(key, data), resolveBaseline(key, data), maxVol)
         } else {
           color = recoveryColor(resolvePct(key, data))
         }
@@ -195,7 +213,7 @@ function SceneBg({ isDark }) {
   return <color attach="background" args={[isDark ? SCENE_BG.dark : SCENE_BG.light]} />
 }
 
-export default function MuscleMap3D({ data }) {
+export default function MuscleMap3D({ data, historyDays = 0 }) {
   const { isDark } = useTheme()
   const isDragging = useRef(false)
   const [hover, setHover]   = useState(null)   // mouse-only, cursor-relative
@@ -223,9 +241,11 @@ export default function MuscleMap3D({ data }) {
     return Math.max(1, ...Object.values(data).map(d => d?.volume ?? 0))
   }, [data])
 
-  const tooltipPct  = tooltip ? resolvePct(tooltip.key, data) : null
-  const tooltipVol  = tooltip ? resolveVol(tooltip.key, data) : null
-  const tooltipSubs = tooltip ? COMPOSITE_MUSCLES[tooltip.key] : null
+  const tooltipPct      = tooltip ? resolvePct(tooltip.key, data) : null
+  const tooltipVol      = tooltip ? resolveVol(tooltip.key, data) : null
+  const tooltipBaseline = tooltip ? resolveBaseline(tooltip.key, data) : null
+  const tooltipSubs     = tooltip ? COMPOSITE_MUSCLES[tooltip.key] : null
+  const useHistoryMode  = historyDays >= 30
 
   const REC_LEGEND = [
     { color: REC.fatigued, label: 'Fatigued'  },
@@ -284,7 +304,7 @@ export default function MuscleMap3D({ data }) {
         <directionalLight position={[2, 4, 3]} intensity={1.5} />
         <directionalLight position={[-2, 2, -2]} intensity={0.45} color="#6090ff" />
 
-        <Bounds fit clip margin={0.85}>
+        <Bounds fit clip observe margin={0.85}>
           <Body
             innerRef={null}
             data={data}
@@ -299,6 +319,7 @@ export default function MuscleMap3D({ data }) {
 
         <OrbitControls
           makeDefault
+          target={[0, 0, 0]}
           enableZoom={false}
           enablePan={false}
           minPolarAngle={Math.PI / 2}
@@ -358,7 +379,19 @@ export default function MuscleMap3D({ data }) {
                   {tooltipVol.toLocaleString()}
                   <span className="text-slate-500 text-[10px] font-normal ml-1">kg·reps</span>
                 </div>
-                <div className="text-slate-500 text-[10px] mt-0.5 font-mono">30-day total</div>
+                {useHistoryMode && tooltipBaseline != null && tooltipBaseline > 0 ? (
+                  <div className="text-slate-400 text-[10px] mt-0.5">
+                    {(() => {
+                      const pct = Math.round((tooltipVol / tooltipBaseline) * 100)
+                      const delta = pct - 100
+                      return delta >= 0
+                        ? `+${delta}% vs your avg`
+                        : `${delta}% vs your avg`
+                    })()}
+                  </div>
+                ) : (
+                  <div className="text-slate-500 text-[10px] mt-0.5 font-mono">30-day total</div>
+                )}
                 {tooltipSubs && (
                   <div className="text-slate-600 text-[10px] mt-0.5">
                     {tooltipSubs.map(k => {
@@ -389,8 +422,15 @@ export default function MuscleMap3D({ data }) {
             </div>
           </div>
         </div>
-        <div className="text-[9.5px] uppercase tracking-widest text-slate-500 font-mono">
-          tap · drag · rotate
+        <div className="text-right">
+          {mode === 'volume' && (
+            <div className="text-[9px] text-slate-500 font-mono mb-0.5">
+              {useHistoryMode ? 'vs your avg' : `baseline in ${30 - historyDays}d`}
+            </div>
+          )}
+          <div className="text-[9.5px] uppercase tracking-widest text-slate-500 font-mono">
+            tap · drag · rotate
+          </div>
         </div>
       </div>
     </div>

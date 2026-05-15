@@ -18,15 +18,23 @@ Output schema (stored in daily_records.analysis):
   }
 """
 
+import asyncio
 import json
 import logging
 import shutil
-import subprocess
 from datetime import date as _date, timedelta
 
 log = logging.getLogger(__name__)
 
-CLAUDE_BIN = shutil.which("claude") or "/Users/zoraz/.local/bin/claude"
+CLAUDE_BIN: str | None = shutil.which("claude")
+
+
+def _get_claude_bin() -> str:
+    if not CLAUDE_BIN:
+        raise RuntimeError(
+            "claude binary not found on PATH — install Claude Code CLI or set PATH correctly"
+        )
+    return CLAUDE_BIN
 
 
 def _is_score(v: object) -> bool:
@@ -239,6 +247,7 @@ def _build_prompt(
     baselines: dict | None,
     history: list[dict] | None = None,
     prev_analysis: dict | None = None,
+    muscle_volume_30d: dict | None = None,
 ) -> str:
     lines = [f"Date: {date}", ""]
 
@@ -248,6 +257,7 @@ def _build_prompt(
         ("steps",            "Steps",            "",     0),
         ("active_calories",  "Active Calories",  "kcal", 0),
         ("avg_heart_rate",   "Avg Heart Rate",   "bpm",  0),
+        ("caffeine_mg",      "Caffeine",         "mg",   0),
         ("exercise_minutes", "Exercise Minutes", "min",  0),
         ("stand_hours",      "Stand Hours",      "hrs",  0),
         ("distance_mi",      "Distance",         "mi",   1),
@@ -330,6 +340,12 @@ def _build_prompt(
             days = info.get("days_since_trained")
             if pct is not None:
                 lines.append(f"  {muscle}: {days or '?'}d → {pct:.0f}%")
+
+    # --- 30-day muscle volume totals ---
+    if muscle_volume_30d:
+        lines += ["", "=== 30-Day Muscle Volume (kg·reps, Hevy only) ==="]
+        for muscle, vol in sorted(muscle_volume_30d.items(), key=lambda x: -x[1]):
+            lines.append(f"  {muscle}: {round(vol):,}")
 
     # --- Previous day context ---
     # Positioned here — before 7-Day History — so Claude has continuity context
@@ -455,31 +471,41 @@ def _build_prompt(
     return _PROMPT_HEADER + "\n".join(lines)
 
 
-def run_analysis(
+async def run_analysis(
     date: str,
     snapshot: dict,
     baselines: dict | None = None,
     history: list[dict] | None = None,
     prev_analysis: dict | None = None,
+    muscle_volume_30d: dict | None = None,
     timeout: int = 180,
 ) -> tuple[dict, str]:
-    prompt = _build_prompt(date, snapshot, baselines, history, prev_analysis)
+    prompt = _build_prompt(date, snapshot, baselines, history, prev_analysis, muscle_volume_30d)
     log.info("[claude_analysis] invoking claude CLI for %s (~%d chars)", date, len(prompt))
 
-    result = subprocess.run(
-        [CLAUDE_BIN, "--print", "--output-format", "text"],
-        input=prompt,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
+    proc = await asyncio.create_subprocess_exec(
+        _get_claude_bin(), "--print", "--output-format", "text",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(input=prompt.encode()),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        log.error("[claude_analysis] claude CLI timed out after %ds for %s", timeout, date)
+        raise RuntimeError(f"claude CLI timed out after {timeout}s")
 
-    if result.returncode != 0:
-        err = result.stderr.strip()
-        log.error("[claude_analysis] claude CLI exited %d: %s", result.returncode, err[:300])
-        raise RuntimeError(f"claude CLI failed (exit {result.returncode}): {err[:200]}")
+    if proc.returncode != 0:
+        err = stderr_bytes.decode().strip()
+        log.error("[claude_analysis] claude CLI exited %d: %s", proc.returncode, err[:300])
+        raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {err[:200]}")
 
-    raw = result.stdout.strip()
+    raw = stdout_bytes.decode().strip()
     log.info("[claude_analysis] received %d chars for %s", len(raw), date)
 
     if raw.startswith("```"):

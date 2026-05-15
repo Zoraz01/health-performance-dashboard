@@ -1,13 +1,15 @@
 """
-APScheduler setup and nightly jobs.
+APScheduler setup and scheduled jobs.
 
 Schedule (America/Toronto):
-  02:00 — nightly_hevy_poll()       fetch Hevy workouts + body weight, enrich with
-                                    muscle groups, write to daily_snapshot, compute
-                                    recovery status, populate daily_records.
+  02:00 / 08:00 / 14:00 / 20:00
+        — nightly_hevy_poll()       fetch last 24h of Hevy workouts + body weight,
+                                    enrich with muscle groups, write to daily_snapshot,
+                                    compute recovery status, populate daily_records.
+                                    Upserts are idempotent — safe to run 4× per day.
   03:00 — nightly_claude_analysis() analyze YESTERDAY (skip if already done).
                                     By 3am all Apple Health webhooks have arrived and
-                                    the Hevy poll has completed.
+                                    the 02:00 Hevy poll has completed.
 
 The frontend always shows yesterday's completed analysis, so there is no
 intra-day re-analysis job.
@@ -22,6 +24,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import database
 import hevy
 import muscle_map
+from config import settings
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +42,15 @@ def _local_today() -> str:
     return datetime.now(LOCAL_TZ).date().isoformat()
 
 
-def compute_recovery_status(target_date: str) -> dict[str, dict]:
+def _get_owner_user_id() -> int | None:
+    """Return the owner's local DB user ID, or None if not yet registered."""
+    if not settings.owner_email:
+        return None
+    owner = database.get_user_by_email(settings.owner_email)
+    return owner["id"] if owner else None
+
+
+def compute_recovery_status(target_date: str, user_id: int | None = None) -> dict[str, dict]:
     """
     For each muscle group, compute days_since_trained and recovery_pct.
 
@@ -53,7 +64,7 @@ def compute_recovery_status(target_date: str) -> dict[str, dict]:
     as a secondary group in an unrelated session (e.g. back during leg day).
     """
     from_date = (date.fromisoformat(target_date) - timedelta(days=14)).isoformat()
-    snapshots = database.get_snapshots(from_date, target_date)
+    snapshots = database.get_snapshots(from_date, target_date, user_id=user_id)
 
     last_trained: dict[str, date] = {}
     last_volume:  dict[str, float] = {}
@@ -133,6 +144,10 @@ async def nightly_hevy_poll() -> None:
     today = _local_today()
     log.info("[hevy_poll] starting for %s", today)
 
+    owner_user_id = _get_owner_user_id()
+    if owner_user_id is None:
+        log.warning("[hevy_poll] owner not yet registered — skipping user-scoped writes")
+
     try:
         body_weight_kg = await hevy.fetch_latest_body_weight()
         raw_workouts = await hevy.fetch_workouts_since()
@@ -179,15 +194,15 @@ async def nightly_hevy_poll() -> None:
             log.info("[hevy_poll] %s muscle volume: %s", date_str,
                      ", ".join(f"{m}:{v:.0f}" for m, v in sorted(daily_volume.items(), key=lambda x: -x[1])))
 
-        database.upsert_snapshot_hevy(date_str, body_weight_kg, daily_volume, enriched)
+        database.upsert_snapshot_hevy(date_str, body_weight_kg, daily_volume, enriched, user_id=owner_user_id)
 
-        recovery = compute_recovery_status(date_str)
-        database.upsert_snapshot_recovery_status(date_str, recovery)
+        recovery = compute_recovery_status(date_str, user_id=owner_user_id)
+        database.upsert_snapshot_recovery_status(date_str, recovery, user_id=owner_user_id)
 
-        snapshot = database.get_snapshot(date_str)
+        snapshot = database.get_snapshot(date_str, user_id=owner_user_id)
         if snapshot and snapshot.get("snapshot_complete"):
-            if database.get_daily_record(date_str) is None:
-                database.upsert_daily_record_snapshot(date_str, snapshot)
+            if database.get_daily_record(date_str, user_id=owner_user_id) is None:
+                database.upsert_daily_record_snapshot(date_str, snapshot, user_id=owner_user_id)
                 log.info("[hevy_poll] daily_records populated for %s — ready for Claude", date_str)
             else:
                 log.info("[hevy_poll] daily_records already present for %s", date_str)
@@ -207,27 +222,36 @@ async def nightly_claude_analysis() -> None:
     yesterday = (datetime.now(LOCAL_TZ).date() - timedelta(days=1)).isoformat()
     log.info("[claude_analysis] nightly job starting for %s", yesterday)
 
-    snapshot = database.get_snapshot(yesterday)
+    owner_user_id = _get_owner_user_id()
+    if owner_user_id is None:
+        log.warning("[claude_analysis] owner not yet registered — skipping")
+        return
+
+    snapshot = database.get_snapshot(yesterday, user_id=owner_user_id)
     if not snapshot:
         log.info("[claude_analysis] no snapshot for %s — skipping", yesterday)
         return
 
-    rec = database.get_daily_record(yesterday)
+    rec = database.get_daily_record(yesterday, user_id=owner_user_id)
     if rec and rec.get("analysis", {}).get("scores", {}).get("overall") is not None:
         log.info("[claude_analysis] analysis already exists for %s — skipping", yesterday)
         return
 
     # Always recompute recovery and attach soreness check-in before analysis.
-    snapshot["recovery_status"] = compute_recovery_status(yesterday)
-    snapshot["soreness"] = database.get_soreness_for_date(yesterday)
+    snapshot["recovery_status"] = compute_recovery_status(yesterday, user_id=owner_user_id)
+    snapshot["soreness"] = database.get_soreness_for_date(yesterday, user_id=owner_user_id)
 
-    baselines    = database.get_metric_baselines(30)
-    history      = database.get_weekly_summary(yesterday)
-    prev_date    = (date.fromisoformat(yesterday) - timedelta(days=1)).isoformat()
-    prev_analysis = database.get_daily_record(prev_date)
+    baselines         = database.get_metric_baselines(30, user_id=owner_user_id)
+    history           = database.get_weekly_summary(yesterday, user_id=owner_user_id)
+    prev_date         = (date.fromisoformat(yesterday) - timedelta(days=1)).isoformat()
+    prev_analysis     = database.get_daily_record(prev_date, user_id=owner_user_id)
+    muscle_volume_30d = database.get_muscle_volume_30d(user_id=owner_user_id)
     try:
-        parsed, raw = claude_analysis.run_analysis(yesterday, snapshot, baselines, history, prev_analysis)
-        database.upsert_daily_record_analysis(yesterday, parsed, raw, force=False)
+        parsed, raw = await claude_analysis.run_analysis(
+            yesterday, snapshot, baselines, history, prev_analysis,
+            muscle_volume_30d=muscle_volume_30d,
+        )
+        database.upsert_daily_record_analysis(yesterday, parsed, raw, force=False, user_id=owner_user_id)
         log.info("[claude_analysis] nightly analysis written for %s (overall=%s)",
                  yesterday, parsed.get("scores", {}).get("overall"))
     except Exception:
@@ -244,6 +268,10 @@ async def backfill_hevy(since_days: int = 7) -> dict[str, int]:
     """
     since = datetime.now(timezone.utc) - timedelta(days=since_days)
     log.info("[hevy_backfill] fetching workouts since %s (%d days)", since.date(), since_days)
+
+    owner_user_id = _get_owner_user_id()
+    if owner_user_id is None:
+        log.warning("[hevy_backfill] owner not yet registered — writes will have NULL user_id")
 
     try:
         body_weight_kg = await hevy.fetch_latest_body_weight()
@@ -276,10 +304,10 @@ async def backfill_hevy(since_days: int = 7) -> dict[str, int]:
                 database.upsert_workout_sets(workout_id, workout.get("exercises") or [])
 
         daily_volume = muscle_map.aggregate_daily_volume(enriched, body_weight_kg)
-        database.upsert_snapshot_hevy(date_str, body_weight_kg, daily_volume, enriched)
+        database.upsert_snapshot_hevy(date_str, body_weight_kg, daily_volume, enriched, user_id=owner_user_id)
 
-        recovery = compute_recovery_status(date_str)
-        database.upsert_snapshot_recovery_status(date_str, recovery)
+        recovery = compute_recovery_status(date_str, user_id=owner_user_id)
+        database.upsert_snapshot_recovery_status(date_str, recovery, user_id=owner_user_id)
 
         results[date_str] = len(workouts)
         log.info("[hevy_backfill] wrote %d workout(s) to %s", len(workouts), date_str)
@@ -289,9 +317,9 @@ async def backfill_hevy(since_days: int = 7) -> dict[str, int]:
     today     = _local_today()
     yesterday = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
     for d in (yesterday, today):
-        if database.get_snapshot(d):
-            refreshed = compute_recovery_status(d)
-            database.upsert_snapshot_recovery_status(d, refreshed)
+        if database.get_snapshot(d, user_id=owner_user_id):
+            refreshed = compute_recovery_status(d, user_id=owner_user_id)
+            database.upsert_snapshot_recovery_status(d, refreshed, user_id=owner_user_id)
             log.info("[hevy_backfill] refreshed recovery_status for %s", d)
 
     return results
@@ -300,8 +328,8 @@ async def backfill_hevy(since_days: int = 7) -> dict[str, int]:
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=LOCAL_TZ)
 
-    # 02:00 — Hevy workout poll (fetch yesterday's workouts, enrich, store)
-    scheduler.add_job(nightly_hevy_poll, "cron", hour=2, minute=0,
+    # 02:00 / 08:00 / 14:00 / 20:00 — Hevy workout poll (every 6h)
+    scheduler.add_job(nightly_hevy_poll, "cron", hour="2,8,14,20", minute=0,
                       id="nightly_hevy_poll", replace_existing=True)
 
     # 03:00 — Analyze yesterday (skip if already done; data guaranteed complete by 3am)

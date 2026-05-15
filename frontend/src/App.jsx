@@ -14,6 +14,7 @@ import ActivityCharts from './components/ActivityCharts'
 import SleepCard from './components/SleepCard'
 import HistoryLog from './components/HistoryLog'
 import { SleepTrend, VolumeTrend, AllScoresTrend, ActivityMixTrend } from './components/TrendCards'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const TABS = ['Yesterday', 'Trends', 'History']
 
@@ -47,25 +48,58 @@ export default function App() {
   const [checkInOpen, setCheckInOpen] = useState(false)
   const { isDark, toggle } = useTheme()
   const { logout } = useAuth()
-  const [todayData, setTodayData] = useState(null)
-  const [loading, setLoading]     = useState(true)
+  const [snapshotsData,    setSnapshotsData]    = useState(null)
+  const [snapshotsLoading, setSnapshotsLoading] = useState(true)
+  const [recordData,       setRecordData]       = useState(null)
+  const [recordLoading,    setRecordLoading]    = useState(true)
+  const [baselinesData,    setBaselinesData]    = useState(null)
+  const [baselinesLoading, setBaselinesLoading] = useState(true)
+  const [muscleVol30d,       setMuscleVol30d]       = useState(null)
+  const [muscleVolBaselines, setMuscleVolBaselines] = useState(null)
+  const [muscleHistoryDays,  setMuscleHistoryDays]  = useState(0)
   const [fetchCount, setFetchCount] = useState(0)
 
   useEffect(() => {
-    setLoading(true)
-    apiFetch('/api/today')
+    setSnapshotsLoading(true)
+    setRecordLoading(true)
+    setBaselinesLoading(true)
+
+    apiFetch('/api/data/snapshots')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setTodayData(data) })
+      .then(d => { if (d) setSnapshotsData(d) })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => setSnapshotsLoading(false))
+
+    apiFetch('/api/data/record')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setRecordData(d) })
+      .catch(() => {})
+      .finally(() => setRecordLoading(false))
+
+    apiFetch('/api/data/baselines')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setBaselinesData(d) })
+      .catch(() => {})
+      .finally(() => setBaselinesLoading(false))
+
+    apiFetch('/api/data/muscle-volume')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) {
+          setMuscleVol30d(d.muscle_volume)
+          setMuscleVolBaselines(d.baselines)
+          setMuscleHistoryDays(d.history_days ?? 0)
+        }
+      })
+      .catch(() => {})
   }, [fetchCount])
 
   const refreshToday = () => setFetchCount(c => c + 1)
 
-  const snapshot  = todayData?.snapshot           ?? null
-  const ySnap     = todayData?.yesterday_snapshot  ?? null
-  const record    = todayData?.record              ?? null
-  const baselines = todayData?.baselines           ?? null
+  const snapshot  = snapshotsData?.snapshot           ?? null
+  const ySnap     = snapshotsData?.yesterday_snapshot  ?? null
+  const record    = recordData?.record                 ?? null
+  const baselines = baselinesData?.baselines           ?? null
 
   // The UI always shows yesterday's completed data. Use yesterday's snapshot
   // for all activity/recovery/sleep display; fall back to today's if missing.
@@ -73,8 +107,8 @@ export default function App() {
 
   // "Run Analysis Now" targets yesterday's date.
   const analysisDate = record?.date ?? (() => {
-    if (!todayData?.date) return null
-    const d = new Date(todayData.date + 'T12:00:00')
+    if (!snapshotsData?.date) return null
+    const d = new Date(snapshotsData.date + 'T12:00:00')
     d.setDate(d.getDate() - 1)
     return d.toISOString().slice(0, 10)
   })()
@@ -117,12 +151,14 @@ export default function App() {
 
   const muscleMapData = displaySnap ? (() => {
     const rs = displaySnap.recovery_status ?? {}
-    const mv = displaySnap.muscle_volume   ?? {}
+    const mv = muscleVol30d      ?? {}
+    const bl = muscleVolBaselines ?? {}
     const muscles = new Set([...Object.keys(rs), ...Object.keys(mv)])
     return Object.fromEntries([...muscles].map(m => [m, {
-      recovery_pct: rs[m]?.recovery_pct ?? 100,
-      days:         rs[m]?.days_since_trained ?? 99,
-      volume:       mv[m] ?? 0,
+      recovery_pct:    rs[m]?.recovery_pct ?? 100,
+      days:            rs[m]?.days_since_trained ?? 99,
+      volume:          mv[m] ?? 0,
+      volumeBaseline:  bl[m] ?? null,
     }]))
   })() : undefined
 
@@ -233,7 +269,13 @@ export default function App() {
           border-b border-slate-800/60 lg:border-b-0 lg:border-r lg:border-slate-800/60
           p-4 lg:p-5 shrink-0
         ">
-          <MuscleMap3D data={muscleMapData} />
+          <ErrorBoundary fallback={
+            <div className="rounded-xl p-6 text-center text-sm text-slate-500" style={{ background: 'var(--card)' }}>
+              3D muscle map unavailable
+            </div>
+          }>
+            <MuscleMap3D data={muscleMapData} historyDays={muscleHistoryDays} />
+          </ErrorBoundary>
         </aside>
 
         {/* Right — scrollable content */}
@@ -241,30 +283,32 @@ export default function App() {
           <div className="max-w-2xl mx-auto px-4 py-6 pb-24 lg:pb-6 space-y-6">
 
             {activeTab === 'Yesterday' && (
-              <>
-                <ActivitySummary data={loading ? undefined : activityData} loading={loading} />
-                <ClaudeCard analysis={analysisData} date={analysisDate} onAnalyzed={refreshToday} />
-                <RecoveryMetrics data={loading ? undefined : recoveryData} loading={loading} />
-                <WorkoutLog sessions={loading ? undefined : (displaySnap?.workouts ?? null)} loading={loading} />
-                <RecoveryStatus data={loading ? undefined : (displaySnap?.recovery_status ?? null)} loading={loading} />
+              <ErrorBoundary>
+                <ActivitySummary data={snapshotsLoading ? undefined : activityData} loading={snapshotsLoading} />
+                <ClaudeCard analysis={recordLoading ? undefined : analysisData} date={analysisDate} onAnalyzed={refreshToday} />
+                <RecoveryMetrics data={(snapshotsLoading || baselinesLoading) ? undefined : recoveryData} loading={snapshotsLoading || baselinesLoading} />
+                <WorkoutLog sessions={snapshotsLoading ? undefined : (displaySnap?.workouts ?? null)} loading={snapshotsLoading} />
+                <RecoveryStatus data={snapshotsLoading ? undefined : (displaySnap?.recovery_status ?? null)} loading={snapshotsLoading} />
                 <SleepCard data={sleepData} />
                 <ScoreChart />
-              </>
+              </ErrorBoundary>
             )}
 
             {activeTab === 'Trends' && (
-              <>
+              <ErrorBoundary>
                 <ActivityCharts />
                 <ScoreChart />
                 <AllScoresTrend />
                 <SleepTrend />
                 <VolumeTrend />
                 <ActivityMixTrend />
-              </>
+              </ErrorBoundary>
             )}
 
             {activeTab === 'History' && (
-              <HistoryLog />
+              <ErrorBoundary>
+                <HistoryLog />
+              </ErrorBoundary>
             )}
 
           </div>

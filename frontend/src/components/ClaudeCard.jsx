@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import apiFetch from '../apiFetch'
+import { formatDate, prettyKey } from '../lib/formatters'
+import { scoreColor } from '../lib/scoreColors'
 
 const SCORE_LABELS = {
   overall:          'Overall',
@@ -17,27 +19,11 @@ const SCORE_TIPS = {
   consistency:      'Regularity of training and sleep over the past 7 days. Missing sessions or erratic sleep patterns reduce this score.',
 }
 
-const SCORE_COLOR = (score) => {
-  if (score >= 8) return { bar: 'bg-emerald-400', text: 'text-emerald-300' }
-  if (score >= 5) return { bar: 'bg-amber-400', text: 'text-amber-300' }
-  return { bar: 'bg-red-400', text: 'text-red-300' }
-}
-
 const FATIGUE_STYLE = {
   recovered: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30',
   working: 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30',
   fatigued: 'bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40',
   overtrained: 'bg-red-900/40 text-red-300 ring-1 ring-red-500/50',
-}
-
-function formatDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-}
-
-function prettyMuscle(key) {
-  return key.replace(/_/g, ' ')
 }
 
 function InfoIcon({ className = '' }) {
@@ -52,7 +38,7 @@ function InfoIcon({ className = '' }) {
 
 function ScoreBar({ label, score, tip, wide }) {
   const [open, setOpen] = useState(false)
-  const { bar, text } = SCORE_COLOR(score)
+  const { bar, text } = scoreColor(score)
   const pct = Math.max(4, (score / 10) * 100)
   return (
     <div className={wide ? 'col-span-2' : ''}>
@@ -279,7 +265,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
                 }`}
               >
                 <span className="w-1 h-1 rounded-full bg-current opacity-80" />
-                {prettyMuscle(name)}
+                {prettyKey(name)}
               </span>
             ))}
           </div>

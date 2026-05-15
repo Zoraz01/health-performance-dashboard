@@ -1,23 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import apiFetch from '../apiFetch'
+import { prettyKey, fmtDate, fmtDuration } from '../lib/formatters'
 import WorkoutSetLog from './WorkoutSetLog'
 import WorkoutHRChart from './WorkoutHRChart'
 
-
-function fmtDuration(min) {
-  const h = Math.floor(min / 60)
-  const m = Math.round(min % 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
-
-function fmtDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function pretty(key) {
-  return key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
-}
 
 function Chevron({ open }) {
   return (
@@ -49,7 +35,7 @@ function HevySession({ session }) {
   useEffect(() => {
     if (!expanded || detail !== null || loadingRef.current) return
     loadingRef.current = true
-    fetch(`/api/workout/${session.id}/sets`)
+    apiFetch(`/api/workout/${session.id}/sets`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         setDetail(data ?? {
@@ -104,7 +90,7 @@ function HevySession({ session }) {
         <div className="flex items-center gap-1.5 shrink-0">
           {topMuscles.map(m => (
             <span key={m} className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-500 uppercase tracking-wider">
-              {pretty(m)}
+              {prettyKey(m)}
             </span>
           ))}
           <Chevron open={expanded} />
@@ -141,7 +127,7 @@ function HevySession({ session }) {
               )}
             </div>
           )}
-          {expanded && detail === null ? <LoadingRows /> : <WorkoutSetLog fixture={detail} />}
+          {expanded && detail === null ? <LoadingRows /> : <WorkoutSetLog data={detail} />}
         </div>
       )}
     </div>
@@ -156,7 +142,7 @@ function AppleSession({ session }) {
   useEffect(() => {
     if (!expanded || hrData !== null || hrLoadingRef.current) return
     hrLoadingRef.current = true
-    fetch(`/api/workout/${session.id}/hr`)
+    apiFetch(`/api/workout/${session.id}/hr`)
       .then(r => r.ok ? r.json() : { workout_id: session.id, samples: [] })
       .catch(() => ({ workout_id: session.id, samples: [] }))
       .then(data => setHrData(data))
@@ -189,7 +175,7 @@ function AppleSession({ session }) {
             <div className="text-slate-100 text-[13px] font-semibold">{name}</div>
             <div className="text-slate-500 text-[10px] font-mono mt-0.5">
               {fmtDate(session.start ?? session.start_time)} · {fmtDuration(session.duration_min)}
-              {session.active_calories != null && ` · ${session.active_calories} kcal`}
+              {session.active_calories != null && ` · ${Math.round(session.active_calories)} kcal`}
             </div>
           </div>
         </div>
@@ -252,8 +238,6 @@ function Skeleton() {
 
 export default function WorkoutLog({ sessions, loading }) {
   if (loading) return <Skeleton />
-  // null means loaded but no workouts → rest day
-  // undefined (pre-load) already handled by loading flag above
   if (!sessions?.length) {
     return (
       <section>

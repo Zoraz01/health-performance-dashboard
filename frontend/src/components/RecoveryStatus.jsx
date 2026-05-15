@@ -1,7 +1,4 @@
-
-function pretty(key) {
-  return key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
-}
+import { prettyKey } from '../lib/formatters'
 
 function barColor(pct) {
   if (pct <= 33) return 'bg-red-500/70'
@@ -78,7 +75,7 @@ export default function RecoveryStatus({ data, loading }) {
         {entries.map(([muscle, info]) => (
           <div key={muscle} className="flex items-center gap-3 px-4 py-2.5">
             <div className="w-24 shrink-0">
-              <div className="text-slate-300 text-xs font-medium">{pretty(muscle)}</div>
+              <div className="text-slate-300 text-xs font-medium">{prettyKey(muscle)}</div>
               <div className="text-slate-500 text-[10px] font-mono mt-0.5">
                 {info.days_since_trained === 0 ? 'today' : `${info.days_since_trained}d ago`}
               </div>

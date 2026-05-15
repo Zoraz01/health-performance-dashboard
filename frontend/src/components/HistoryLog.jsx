@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import apiFetch from '../apiFetch'
+import { scoreColor, SCORE_DIMENSION_ROWS } from '../lib/scoreColors'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,11 +30,8 @@ function fmtMin(min) {
 
 function ScoreBadge({ score }) {
   if (score == null) return null
-  const cls = score >= 8 ? 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25'
-            : score >= 5 ? 'bg-amber-500/15 text-amber-400 ring-amber-500/25'
-            :               'bg-red-500/15 text-red-400 ring-red-500/25'
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ring-1 ${cls}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ring-1 ${scoreColor(score).badge}`}>
       {score}
     </span>
   )
@@ -41,8 +39,7 @@ function ScoreBadge({ score }) {
 
 function ScoreDot({ score }) {
   if (score == null) return <span className="w-1.5 h-1.5 rounded-full bg-slate-700 inline-block" />
-  const bg = score >= 8 ? 'bg-emerald-400' : score >= 5 ? 'bg-amber-400' : 'bg-red-400'
-  return <span className={`w-1.5 h-1.5 rounded-full ${bg} inline-block`} />
+  return <span className={`w-1.5 h-1.5 rounded-full ${scoreColor(score).dot} inline-block`} />
 }
 
 function ChevronIcon({ open }) {
@@ -128,14 +125,6 @@ function DayDetail({ day, record, loadingRecord }) {
   const sleepAwake = day.sleep_awake_min ?? 0
   const sleepCore  = sleepTotal ? Math.max(0, sleepTotal - sleepDeep - sleepRem - sleepAwake) : 0
 
-  const SCORE_ROWS = [
-    { key: 'overall',     label: 'Overall',     color: '#e2e8f0' },
-    { key: 'training',    label: 'Training',    color: '#fbbf24' },
-    { key: 'recovery',    label: 'Recovery',    color: '#34d399' },
-    { key: 'balance',     label: 'Balance',     color: '#38bdf8' },
-    { key: 'consistency', label: 'Consistency', color: '#a78bfa' },
-  ]
-
   return (
     <div className="border-t border-slate-800 px-4 py-4 space-y-5 bg-slate-950/40">
 
@@ -143,7 +132,7 @@ function DayDetail({ day, record, loadingRecord }) {
       {hasScores && (
         <DetailSection title="Scores">
           <div className="space-y-2">
-            {SCORE_ROWS.map(({ key, label, color }) => (
+            {SCORE_DIMENSION_ROWS.map(({ key, label, color }) => (
               <ScoreBar key={key} label={label} value={scores[key]} color={color} />
             ))}
           </div>
@@ -430,11 +419,7 @@ function MonthSection({ monthKey, days }) {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {avgScore != null && (
-            <span className={`text-[11px] font-bold tabular-nums px-2 py-0.5 rounded ring-1 ${
-              avgScore >= 8 ? 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25'
-            : avgScore >= 5 ? 'bg-amber-500/15  text-amber-400  ring-amber-500/25'
-            :                  'bg-red-500/15    text-red-400    ring-red-500/25'
-            }`}>
+            <span className={`text-[11px] font-bold tabular-nums px-2 py-0.5 rounded ring-1 ${scoreColor(avgScore).badge}`}>
               {avgScore.toFixed(1)} avg
             </span>
           )}

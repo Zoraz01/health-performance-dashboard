@@ -11,11 +11,9 @@ import os
 import sys
 from datetime import datetime
 from statistics import mean
-from zoneinfo import ZoneInfo
-
 log = logging.getLogger(__name__)
 
-LOCAL_TZ = ZoneInfo("America/Toronto")
+from scheduler import LOCAL_TZ  # single definition lives in scheduler.py
 
 # (metric_name, aggregation_method, snapshot_column)
 METRIC_RULES: list[tuple[str, str, str]] = [
@@ -34,6 +32,7 @@ METRIC_RULES: list[tuple[str, str, str]] = [
     ("body_mass",                  "last",           "body_weight_kg"),
     ("blood_oxygen_saturation",    "mean",           "spo2"),
     ("respiratory_rate",           "mean",           "respiratory_rate"),
+    ("caffeine",                   "sum",            "caffeine_mg"),
 ]
 
 
@@ -218,9 +217,11 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
     Each returned dict has source='apple_health' — no muscle-group volume
     (that comes from Hevy only). All scalars are pulled from {qty, units} wrappers.
 
-    Deduplication: Apple Health can log the same session twice (e.g. Watch app +
-    auto-detected segment). When two workouts share the same name and start within
-    60 seconds of each other, only the longer one is kept.
+    Deduplication: Apple Health can log the same session twice — most commonly from
+    Hevy's Watch→iPhone sync, which writes one HKWorkout from the Watch side and one
+    from the iPhone sync. When two workouts share the same name and their time windows
+    overlap, only the longer one is kept. Non-null biometric fields are merged from
+    the shorter entry into the longer one before it is dropped.
     """
     raw = payload.get("data", {}).get("workouts") or []
     out = []
@@ -237,13 +238,20 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
         if workout_date != target_date:
             continue
 
+        end_raw = w.get("end")
+        try:
+            end_dt = _parse_dt(end_raw) if end_raw else None
+        except ValueError:
+            end_dt = None
+
         out.append({
             "source":          "apple_health",
             "id":              w.get("id"),
             "name":            w.get("name"),
             "start":           start,
             "_start_dt":       start_dt,
-            "end":             w.get("end"),
+            "end":             end_raw,
+            "_end_dt":         end_dt,
             "duration_min":    round((w.get("duration") or 0) / 60, 1),
             "active_calories": _qty(w, "activeEnergyBurned"),
             "avg_heart_rate":  _qty(w, "avgHeartRate"),
@@ -252,17 +260,33 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
             "intensity":       _qty(w, "intensity"),
         })
 
-    # Drop shorter duplicate sessions that start within 60 s of a longer same-named entry.
+    # Dedup same-named sessions whose time windows overlap (Hevy Watch→iPhone sync
+    # can create two Apple Health records for the same gym session with start times
+    # that differ by more than the old 60-second proximity check could catch).
+    # Keep the longer entry; copy non-null biometrics from the shorter one.
     deduped: list[dict] = []
     for candidate in out:
         absorbed = False
         for i, existing in enumerate(deduped):
             if existing["name"] != candidate["name"]:
                 continue
-            delta = abs((existing["_start_dt"] - candidate["_start_dt"]).total_seconds())
-            if delta <= 60:
+            c_end = candidate.get("_end_dt")
+            e_end = existing.get("_end_dt")
+            if not (c_end and e_end):
+                continue
+            overlaps = (existing["_start_dt"] < c_end) and (candidate["_start_dt"] < e_end)
+            if overlaps:
                 if candidate["duration_min"] > existing["duration_min"]:
-                    deduped[i] = candidate  # replace with the longer session
+                    # Merge biometrics from the shorter (existing) into the longer (candidate)
+                    for field in ("avg_heart_rate", "max_heart_rate", "active_calories"):
+                        if candidate.get(field) is None and existing.get(field) is not None:
+                            candidate[field] = existing[field]
+                    deduped[i] = candidate
+                else:
+                    # Kept entry is existing — merge biometrics from candidate into it
+                    for field in ("avg_heart_rate", "max_heart_rate", "active_calories"):
+                        if existing.get(field) is None and candidate.get(field) is not None:
+                            existing[field] = candidate[field]
                 absorbed = True
                 break
         if not absorbed:
@@ -270,6 +294,7 @@ def parse_workouts_payload(payload: dict, target_date: str) -> list[dict]:
 
     for w in deduped:
         w.pop("_start_dt", None)
+        w.pop("_end_dt", None)
 
     if len(deduped) < len(out):
         log.info("[apple_health] dedup removed %d duplicate workout(s) for %s",
@@ -370,8 +395,7 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
             for entry in (m.get("data") or []):
                 # Use the full entry as the deduplication key to avoid dropping overlapping records
                 # like 'Core' and 'In Bed' sleep stages that start at the exact same timestamp.
-                import json as _json
-                dedup_key = _json.dumps(entry, sort_keys=True)
+                dedup_key = json.dumps(entry, sort_keys=True)
                 if dedup_key not in bucket:
                     bucket[dedup_key] = entry
         # Collect medication names logged for this date.
@@ -411,13 +435,12 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
                 out["body_weight_kg"] = round(val * 0.453592, 2)
 
     if all_medications:
-        import json as _json
-        out["medications_today"] = _json.dumps(all_medications)
+        out["medications_today"] = json.dumps(all_medications)
 
     return out
 
 
-def ingest_metrics(payload: dict, target_date: str) -> dict:
+def ingest_metrics(payload: dict, target_date: str, user_id: int | None = None) -> dict:
     """
     Append raw blob, then re-aggregate ALL blobs for target_date and write to DB.
 
@@ -432,19 +455,19 @@ def ingest_metrics(payload: dict, target_date: str) -> dict:
     if fields is None:
         raise RuntimeError(f"DuckDB re-aggregation failed for {target_date} — raw blob stored but snapshot not updated")
     log.info("[apple_health] metrics for %s: %d fields extracted (all blobs)", target_date, len(fields))
-    complete = database.upsert_snapshot_apple_health(target_date, fields)
+    complete = database.upsert_snapshot_apple_health(target_date, fields, user_id=user_id)
     if complete:
         log.info("[apple_health] snapshot complete for %s — Claude can run", target_date)
     return fields
 
 
-def ingest_workouts(payload: dict, target_date: str) -> list[dict]:
+def ingest_workouts(payload: dict, target_date: str, user_id: int | None = None) -> list[dict]:
     """Parse workouts payload, append raw blob, merge into DB, store HR timeseries."""
     import database
     workouts = parse_workouts_payload(payload, target_date)
     log.info("[apple_health] workouts for %s: %d entries", target_date, len(workouts))
     database.append_raw_blob("raw_apple_health_workouts", target_date, payload)
-    database.upsert_snapshot_apple_health_workouts(target_date, workouts)
+    database.upsert_snapshot_apple_health_workouts(target_date, workouts, user_id=user_id)
 
     for raw_w in payload.get("data", {}).get("workouts") or []:
         workout_id = raw_w.get("id")

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import apiFetch from '../apiFetch'
+import { prettyKey } from '../lib/formatters'
 
 const MUSCLES = [
   'chest', 'shoulders', 'triceps', 'lats', 'upper_back',
@@ -8,10 +9,6 @@ const MUSCLES = [
 ]
 
 const SCALE = ['None', 'Mild', 'Noticeable', 'Moderate', 'Significant', 'Severe']
-
-function pretty(key) {
-  return key.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
-}
 
 function levelColor(v) {
   if (v === 0) return 'text-slate-400'
@@ -35,7 +32,7 @@ function MuscleSliders({ soreness, onChange }) {
       {MUSCLES.map(m => (
         <div key={m}>
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-slate-200 text-xs font-medium">{pretty(m)}</span>
+            <span className="text-slate-200 text-xs font-medium">{prettyKey(m)}</span>
             <span className={`text-[11px] font-semibold tabular-nums font-mono ${levelColor(soreness[m])}`}>
               {soreness[m]} · {SCALE[soreness[m]]}
             </span>
@@ -111,7 +108,7 @@ function CheckedInView({ logged, date, onClose }) {
           <div className="flex flex-wrap gap-2">
             {nonZero.map(([muscle, val]) => (
               <span key={muscle} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium ${levelBg(val)}`}>
-                {pretty(muscle)}
+                {prettyKey(muscle)}
                 <span className="font-mono font-bold">{val}</span>
               </span>
             ))}
@@ -143,14 +140,16 @@ function CheckedInView({ logged, date, onClose }) {
 }
 
 export default function SorenessCheckIn({ inline = false, forceOpen = false, onClose }) {
-  const [submitted, setSubmitted] = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [open, setOpen]           = useState(false)
-  const [today, setToday]         = useState('')
-  const [soreness, setSoreness]   = useState(() =>
+  const [submitted, setSubmitted]   = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [open, setOpen]             = useState(false)
+  const [today, setToday]           = useState('')
+  const [soreness, setSoreness]     = useState(() =>
     Object.fromEntries(MUSCLES.map(m => [m, 0]))
   )
-  const [note, setNote] = useState('')
+  const [note, setNote]         = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
 
   useEffect(() => {
     apiFetch('/api/checkin/today')
@@ -168,17 +167,29 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
   const isOpen     = open || forceOpen
   const closeModal = () => { setOpen(false); onClose?.() }
 
-  const handleSubmit = () => {
-    if (!today) return
+  const handleSubmit = async () => {
+    if (!today || submitting) return
+    setSubmitting(true)
+    setSubmitError(null)
     const payload = { date: today, soreness, note: note.trim() }
-    apiFetch('/api/checkin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => {})
-    const result = { soreness, note: note.trim() }
-    setSubmitted(result)
-    closeModal()
+    try {
+      const r = await apiFetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        setSubmitError(body.detail ?? 'Failed to save. Please try again.')
+        return
+      }
+      setSubmitted({ soreness, note: note.trim() })
+      closeModal()
+    } catch {
+      setSubmitError('Failed to save. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // Inline / Check-in tab
@@ -205,12 +216,15 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
         <ScaleLegend />
         <MuscleSliders soreness={soreness} onChange={setSoreness} />
         <NoteField value={note} onChange={setNote} />
+        {submitError && (
+          <p className="mt-3 text-red-400 text-[12px]">{submitError}</p>
+        )}
         <button
           onClick={handleSubmit}
           className="mt-6 w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          disabled={!today}
+          disabled={!today || submitting}
         >
-          Submit Check-in
+          {submitting ? 'Saving…' : 'Submit Check-in'}
         </button>
       </section>
     )
@@ -275,12 +289,15 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                   <ScaleLegend />
                   <MuscleSliders soreness={soreness} onChange={setSoreness} />
                   <NoteField value={note} onChange={setNote} />
+                  {submitError && (
+                    <p className="mt-3 text-red-400 text-[12px]">{submitError}</p>
+                  )}
                   <button
                     onClick={handleSubmit}
-                    disabled={!today}
+                    disabled={!today || submitting}
                     className="mt-6 w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Submit Check-in
+                    {submitting ? 'Saving…' : 'Submit Check-in'}
                   </button>
                 </>
               )}

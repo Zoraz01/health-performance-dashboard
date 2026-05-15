@@ -11,30 +11,15 @@
 
 import { useState, useEffect } from 'react'
 import apiFetch from '../apiFetch'
-import { useTheme } from '../ThemeContext'
 import {
   BarChart, Bar, LineChart, Line,
   ComposedChart,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell,
 } from 'recharts'
-
-// ── Chart color helpers ───────────────────────────────────────────────────────
-
-const CHART_COLORS = {
-  dark:  { axis: 'rgb(84,122,132)',  tick: 'rgb(84,122,132)',  grid: 'rgb(20,50,60)',    bg: 'rgb(6,24,29)'    },
-  light: { axis: 'rgb(118,102,82)', tick: 'rgb(118,102,82)', grid: 'rgb(178,160,136)', bg: 'rgb(252,247,238)' },
-}
-
-function useChartColors() {
-  const { isDark } = useTheme()
-  return isDark ? CHART_COLORS.dark : CHART_COLORS.light
-}
-
-function shortDate(iso) {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
-}
+import { shortDate } from '../lib/formatters'
+import { useChartColors } from '../lib/chartColors'
+import { SCORE_DIMENSION_ROWS } from '../lib/scoreColors'
 
 // ── Shared empty / loading states ─────────────────────────────────────────────
 
@@ -292,13 +277,7 @@ export function VolumeTrend() {
 
 // ── Score Breakdown ───────────────────────────────────────────────────────────
 
-const SCORE_LINES = [
-  { key: 'overall',     label: 'Overall',     color: '#e2e8f0' },
-  { key: 'training',    label: 'Training',    color: '#fbbf24' },
-  { key: 'recovery',    label: 'Recovery',    color: '#34d399' },
-  { key: 'balance',     label: 'Balance',     color: '#38bdf8' },
-  { key: 'consistency', label: 'Consistency', color: '#a78bfa' },
-]
+const SCORE_LINES = SCORE_DIMENSION_ROWS
 
 function ScoreTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
