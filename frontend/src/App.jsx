@@ -283,7 +283,7 @@ export default function App() {
 
         {/* Right — scrollable content */}
         <div className="min-w-0 lg:flex-1 lg:overflow-y-auto lg:min-h-0">
-          <div className="max-w-2xl mx-auto px-4 py-6 pb-24 lg:pb-6 space-y-6">
+          <div className="max-w-2xl mx-auto px-4 py-6 pb-28 lg:pb-6 space-y-6">
 
             {activeTab === 'Yesterday' && (
               <ErrorBoundary>

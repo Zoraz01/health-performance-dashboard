@@ -93,7 +93,9 @@ function HevySession({ session }) {
               {prettyKey(m)}
             </span>
           ))}
-          <Chevron open={expanded} />
+          <span className="w-8 h-8 flex items-center justify-center -mr-1 shrink-0">
+            <Chevron open={expanded} />
+          </span>
         </div>
       </button>
       {expanded && (
@@ -181,7 +183,9 @@ function AppleSession({ session }) {
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-[9px] uppercase tracking-wider text-slate-600 font-mono">Apple Health</span>
-          <Chevron open={expanded} />
+          <span className="w-8 h-8 flex items-center justify-center -mr-1 shrink-0">
+            <Chevron open={expanded} />
+          </span>
         </div>
       </button>
       {expanded && (

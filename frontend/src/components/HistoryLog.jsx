@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import apiFetch from '../apiFetch'
 import { scoreColor, SCORE_DIMENSION_ROWS } from '../lib/scoreColors'
 
@@ -245,6 +245,7 @@ function ExpandableDay({ day }) {
   const [record, setRecord]           = useState(null)
   const [loadingRecord, setLoadingRecord] = useState(false)
   const [fetched, setFetched]         = useState(false)
+  const rowRef = useRef(null)
 
   const toggle = () => {
     if (!open && !fetched) {
@@ -256,13 +257,17 @@ function ExpandableDay({ day }) {
         .catch(() => {})
         .finally(() => setLoadingRecord(false))
     }
-    setOpen(o => !o)
+    const nextOpen = !open
+    setOpen(nextOpen)
+    if (nextOpen) {
+      setTimeout(() => rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+    }
   }
 
   const workoutNames = (day.workouts || []).map(w => w.title ?? w.name).filter(Boolean)
 
   return (
-    <div className={`rounded-xl ring-1 transition-all duration-200 overflow-hidden ${open ? 'ring-slate-600 bg-slate-900' : 'ring-slate-800 bg-slate-900/60 hover:ring-slate-700'}`}>
+    <div ref={rowRef} className={`rounded-xl ring-1 transition-all duration-200 overflow-hidden ${open ? 'ring-slate-600 bg-slate-900' : 'ring-slate-800 bg-slate-900/60 hover:ring-slate-700'}`}>
       <button
         onClick={toggle}
         className="w-full px-4 py-3 flex items-center gap-3 text-left"
@@ -277,25 +282,25 @@ function ExpandableDay({ day }) {
         <div className="flex-1 flex gap-4 min-w-0 flex-wrap">
           {day.steps != null && (
             <div className="min-w-0">
-              <div className="text-[9.5px] uppercase tracking-wider text-slate-500 font-mono">Steps</div>
-              <div className="text-slate-300 text-[12px] font-semibold tabular-nums">{Math.round(day.steps).toLocaleString()}</div>
+              <div className="text-[10.5px] uppercase tracking-wider text-slate-500 font-mono">Steps</div>
+              <div className="text-slate-300 text-[13px] font-semibold tabular-nums">{Math.round(day.steps).toLocaleString()}</div>
             </div>
           )}
           {day.hrv_ms != null && (
             <div>
-              <div className="text-[9.5px] uppercase tracking-wider text-slate-500 font-mono">HRV</div>
-              <div className="text-slate-300 text-[12px] font-semibold tabular-nums">{day.hrv_ms.toFixed(1)}<span className="text-slate-600 text-[10px] ml-0.5">ms</span></div>
+              <div className="text-[10.5px] uppercase tracking-wider text-slate-500 font-mono">HRV</div>
+              <div className="text-slate-300 text-[13px] font-semibold tabular-nums">{day.hrv_ms.toFixed(1)}<span className="text-slate-600 text-[10px] ml-0.5">ms</span></div>
             </div>
           )}
           {day.active_calories != null && (
             <div>
-              <div className="text-[9.5px] uppercase tracking-wider text-slate-500 font-mono">Cal</div>
-              <div className="text-slate-300 text-[12px] font-semibold tabular-nums">{Math.round(day.active_calories)}</div>
+              <div className="text-[10.5px] uppercase tracking-wider text-slate-500 font-mono">Cal</div>
+              <div className="text-slate-300 text-[13px] font-semibold tabular-nums">{Math.round(day.active_calories)}</div>
             </div>
           )}
           {workoutNames.length > 0 && (
             <div className="min-w-0">
-              <div className="text-[9.5px] uppercase tracking-wider text-slate-500 font-mono">Workout</div>
+              <div className="text-[10.5px] uppercase tracking-wider text-slate-500 font-mono">Workout</div>
               <div className="text-slate-400 text-[11px] truncate max-w-[120px]">{workoutNames.join(', ')}</div>
             </div>
           )}

@@ -109,7 +109,7 @@ export default function ScoreChart({ history: historyProp }) {
                 width={32}
               />
               <ReferenceLine y={avg} stroke={c.ref} strokeDasharray="3 3" strokeWidth={1} />
-              <Tooltip cursor={{ fill: 'rgba(148,163,184,0.06)' }} content={<ScoreTooltip />} />
+              <Tooltip cursor={{ fill: 'rgba(148,163,184,0.06)' }} content={<ScoreTooltip />} wrapperStyle={{ maxWidth: 'calc(100vw - 32px)' }} />
               <Bar dataKey="overall" radius={[3, 3, 0, 0]}>
                 {history.map((d, i) => (
                   <Cell key={i} fill={scoreColor(d.overall).hex} />

@@ -265,8 +265,8 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
                   <h2 className="text-slate-100 text-sm font-semibold">Daily Soreness Check-in</h2>
                   <p className="text-slate-500 text-[10.5px] mt-0.5 uppercase tracking-wider">Rate 0–5 per muscle group</p>
                 </div>
-                <button onClick={closeModal} className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center transition-colors">
-                  <svg viewBox="0 0 12 12" className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <button onClick={closeModal} className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 grid place-items-center transition-colors">
+                  <svg viewBox="0 0 12 12" className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
                     <path d="M2 2l8 8M10 2l-8 8" />
                   </svg>
                 </button>
@@ -275,7 +275,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
 
             <div className={`${
               submitted ? '' : 'flex-1 min-h-0 overflow-y-auto'
-            } px-5 py-4 pb-6`}>
+            } px-5 py-4 pb-6`} style={submitted ? undefined : { WebkitOverflowScrolling: 'touch' }}>
               {loading ? (
                 <div className="space-y-4 animate-pulse py-2">
                   {[48, 64, 48, 64, 48].map((w, i) => (

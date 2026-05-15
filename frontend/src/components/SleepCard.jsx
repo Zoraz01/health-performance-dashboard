@@ -133,7 +133,7 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
         <text
           key={`lbl-${stage}`}
           x={LABEL_W - 6} y={MARKER_H + i * ROW_H + ROW_H / 2 + 4}
-          textAnchor="end" fontSize="9" fill="#64748b" fontFamily="ui-monospace,monospace"
+          textAnchor="end" fontSize="10" fill="#64748b" fontFamily="ui-monospace,monospace"
         >
           {STAGE_CFG[stage].label}
         </text>
@@ -169,10 +169,10 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
       />
 
       {/* Sleep start/end time labels in MARKER_H strip */}
-      <text x={sleepStartX} y={MARKER_H - 3} textAnchor="middle" fontSize="8" fill="#94a3b8">
+      <text x={sleepStartX} y={MARKER_H - 3} textAnchor="middle" fontSize="9" fill="#94a3b8">
         {fmtTime(segments[0].start)}
       </text>
-      <text x={sleepEndX} y={MARKER_H - 3} textAnchor="middle" fontSize="8" fill="#94a3b8">
+      <text x={sleepEndX} y={MARKER_H - 3} textAnchor="middle" fontSize="9" fill="#94a3b8">
         {fmtTime(segments[segments.length - 1].end)}
       </text>
 
@@ -196,7 +196,7 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
             />
             <text
               x={x} y={MARKER_H + chartAreaH + AXIS_H - 2}
-              textAnchor="middle" fontSize="7.5" fill="#475569"
+              textAnchor="middle" fontSize="8.5" fill="#475569"
             >
               {label}
             </text>

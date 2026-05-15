@@ -87,7 +87,7 @@ export default function RecoveryStatus({ data, loading }) {
               />
             </div>
             <div className="w-10 text-right shrink-0">
-              <span className="text-[10px] font-mono text-slate-400">{info.recovery_pct}%</span>
+              <span className="text-[11px] font-mono text-slate-400">{info.recovery_pct}%</span>
             </div>
           </div>
         ))}

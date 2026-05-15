@@ -260,7 +260,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
               <span
                 key={name}
                 title={state}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium capitalize ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium capitalize whitespace-nowrap ${
                   FATIGUE_STYLE[state] || FATIGUE_STYLE.recovered
                 }`}
               >
