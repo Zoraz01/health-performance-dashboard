@@ -33,6 +33,11 @@ const Icon = {
       <path d="M3 16h4v-3h4v-3h4V7h2"/>
     </svg>
   ),
+  Heart: (p) => (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M10 15.5C9.6 15.1 4 11 4 7.5A3.5 3.5 0 0 1 10 5a3.5 3.5 0 0 1 6 2.5c0 3.5-5.6 7.6-6 8Z"/>
+    </svg>
+  ),
 }
 
 function Metric({ icon: I, value, sub, label, accent = 'text-slate-400' }) {
@@ -100,6 +105,9 @@ export default function ActivitySummary({ data, loading }) {
     { icon: Icon.Stand,  value: data.stand_hours != null ? Math.round(data.stand_hours) : '—', sub: `/ ${data.stand_goal ?? 12}`, label: 'Stand hrs', accent: 'text-cyan-400' },
     { icon: Icon.Route,  value: data.distance_mi != null ? data.distance_mi.toFixed(1) : '—', label: 'Distance mi', accent: 'text-violet-400' },
     { icon: Icon.Stairs, value: data.flights_climbed != null ? Math.round(data.flights_climbed) : '—', label: 'Flights', accent: 'text-amber-400' },
+    ...(data.avg_heart_rate != null ? [
+      { icon: Icon.Heart, value: Math.round(data.avg_heart_rate), sub: 'bpm', label: 'Avg HR', accent: 'text-red-400' },
+    ] : []),
   ]
 
   return (

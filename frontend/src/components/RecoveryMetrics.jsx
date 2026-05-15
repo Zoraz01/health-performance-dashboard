@@ -89,6 +89,36 @@ const CARDS = [
   { name: 'Walking HR', valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140, format: v => Math.round(v) },
 ]
 
+function spo2Color(pct) {
+  if (pct == null)  return { text: 'text-slate-300', dot: 'bg-slate-500', label: '' }
+  if (pct < 90)     return { text: 'text-red-300',   dot: 'bg-red-400',   label: 'Low — seek care' }
+  if (pct < 95)     return { text: 'text-amber-300', dot: 'bg-amber-400', label: 'Below normal' }
+  return              { text: 'text-emerald-300', dot: 'bg-emerald-400', label: 'Normal' }
+}
+
+function InlineStatRow({ label, value, unit, color, dot, statusLabel, source }) {
+  return (
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-[10.5px] uppercase tracking-[0.16em] text-slate-500 font-semibold">{label}</div>
+        {source && <div className="text-slate-600 text-[9.5px] font-mono mt-0.5">{source}</div>}
+      </div>
+      <div className="text-right">
+        <div className="flex items-baseline gap-1 justify-end">
+          <span className={`text-2xl font-semibold tabular-nums tracking-tight ${color}`}>{value}</span>
+          <span className="text-slate-500 text-xs font-medium">{unit}</span>
+        </div>
+        {statusLabel && (
+          <div className="flex items-center gap-1 justify-end mt-1">
+            <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+            <span className="text-[10px] text-slate-400">{statusLabel}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Skeleton() {
   return (
     <section className="animate-pulse">
@@ -148,6 +178,37 @@ export default function RecoveryMetrics({ data, loading }) {
               />
             ))}
           </div>
+
+          {(data.spo2 != null || data.respiratory_rate != null) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              {data.spo2 != null && (() => {
+                const { text, dot, label } = spo2Color(data.spo2)
+                return (
+                  <InlineStatRow
+                    label="Blood Oxygen"
+                    value={data.spo2.toFixed(1)}
+                    unit="%"
+                    color={text}
+                    dot={dot}
+                    statusLabel={label}
+                    source={data.spo2_avg != null ? `30-day avg ${data.spo2_avg.toFixed(1)}%` : 'RingConn'}
+                  />
+                )
+              })()}
+              {data.respiratory_rate != null && (
+                <InlineStatRow
+                  label="Respiratory Rate"
+                  value={Math.round(data.respiratory_rate)}
+                  unit="br/min"
+                  color="text-slate-300"
+                  dot="bg-slate-500"
+                  statusLabel={data.respiratory_rate < 12 ? 'Low' : data.respiratory_rate > 20 ? 'Elevated' : 'Normal'}
+                  source="Apple Watch"
+                />
+              )}
+            </div>
+          )}
+
           {missing.length > 0 && (
             <p className="text-[11px] text-slate-600 font-mono mt-2 px-1">
               Waiting on Apple Health sync for: {missing.join(', ')}

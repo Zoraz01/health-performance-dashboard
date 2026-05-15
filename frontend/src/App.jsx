@@ -123,6 +123,7 @@ export default function App() {
     flights_climbed:  displaySnap.flights_climbed,
     hrv_ms:           displaySnap.hrv_ms,
     resting_hr:       displaySnap.resting_hr,
+    avg_heart_rate:   displaySnap.avg_heart_rate,
   } : undefined
 
   const recoveryData = (displaySnap && baselines) ? {
@@ -134,6 +135,9 @@ export default function App() {
     cardio_recovery_avg:  baselines.cardio_recovery_avg,
     walking_hr_avg:       displaySnap.walking_hr_avg,
     walking_hr_baseline:  baselines.walking_hr_baseline,
+    spo2:                 displaySnap.spo2,
+    spo2_avg:             baselines.spo2_avg,
+    respiratory_rate:     displaySnap.respiratory_rate,
   } : undefined
 
   const analysisData = record ? {

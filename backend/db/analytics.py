@@ -42,7 +42,7 @@ def get_activity_history(days: int = 30, user_id: int | None = None) -> list[dic
             f"""
             SELECT date, steps, active_calories, hrv_ms,
                    ROUND(body_weight_kg * 2.20462, 1) AS body_weight_lbs,
-                   resting_hr, cardio_recovery
+                   resting_hr, cardio_recovery, spo2, avg_heart_rate
             FROM daily_snapshot
             WHERE date >= date('now', ? || ' days'){uid_clause}
             ORDER BY date ASC
