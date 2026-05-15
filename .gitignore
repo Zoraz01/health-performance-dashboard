@@ -49,3 +49,4 @@ backend/logs/
 .idea/
 *.swp
 *.swo
+/.claude

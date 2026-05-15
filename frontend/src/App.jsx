@@ -143,10 +143,13 @@ export default function App() {
   } : undefined
 
   const sleepData = displaySnap ? {
-    total: displaySnap.sleep_total_min,
-    deep:  displaySnap.sleep_deep_min,
-    rem:   displaySnap.sleep_rem_min,
-    awake: displaySnap.sleep_awake_min,
+    total:  displaySnap.sleep_total_min,
+    deep:   displaySnap.sleep_deep_min,
+    rem:    displaySnap.sleep_rem_min,
+    awake:  displaySnap.sleep_awake_min,
+    stages: displaySnap.sleep_stages ?? null,
+    source: displaySnap.sleep_source ?? null,
+    hr:     displaySnap.sleep_hr     ?? null,
   } : null
 
   const muscleMapData = displaySnap ? (() => {

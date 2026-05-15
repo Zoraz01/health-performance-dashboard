@@ -18,6 +18,7 @@ APPLE_HEALTH_COLUMNS = (
     "walking_hr_avg", "sleep_total_min", "sleep_deep_min",
     "sleep_rem_min", "sleep_awake_min", "medications_today",
     "spo2", "respiratory_rate", "caffeine_mg",
+    "sleep_stages", "sleep_source", "sleep_hr",
 )
 
 HEVY_COLUMNS = ("body_weight_kg", "muscle_volume", "workouts")
@@ -236,6 +237,10 @@ _SQLITE_MIGRATIONS: list[str] = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_webhook_token ON users(webhook_token) WHERE webhook_token IS NOT NULL",
     "ALTER TABLE soreness_log ADD COLUMN user_id INTEGER",
     "CREATE INDEX IF NOT EXISTS idx_soreness_log_user_id ON soreness_log(user_id)",
+    # Sleep phase visualization columns
+    "ALTER TABLE daily_snapshot ADD COLUMN sleep_stages TEXT",
+    "ALTER TABLE daily_snapshot ADD COLUMN sleep_source TEXT",
+    "ALTER TABLE daily_snapshot ADD COLUMN sleep_hr TEXT",
 ]
 
 

@@ -98,7 +98,50 @@ def aggregate_metric(
     raise ValueError(f"unknown aggregation method: {method!r}")
 
 
-def parse_sleep(entries: list[dict], target_date: str) -> dict:
+def _extract_sleep_hr(
+    hr_entries: list[dict],
+    sleep_start_iso: str,
+    sleep_end_iso: str,
+) -> list[dict]:
+    """
+    Filter HR entries to the sleep window and return [{t, hr}, ...] sorted by time.
+    Prefers RingConn readings when multiple sources share a timestamp.
+    sleep_start_iso / sleep_end_iso must be tz-aware ISO strings (from isoformat()).
+    """
+    from datetime import datetime as _dt
+    try:
+        win_start = _dt.fromisoformat(sleep_start_iso)
+        win_end   = _dt.fromisoformat(sleep_end_iso)
+    except Exception:
+        return []
+
+    seen: dict[str, dict] = {}
+    for entry in hr_entries:
+        ts_raw = entry.get("start") or entry.get("date") or ""
+        if not ts_raw:
+            continue
+        try:
+            dt = _parse_dt(ts_raw)
+        except Exception:
+            continue
+        if dt < win_start or dt > win_end:
+            continue
+        hr_val = entry.get("Avg") or entry.get("qty")
+        if hr_val is None:
+            continue
+        ts_iso = dt.isoformat()
+        src = entry.get("source", "")
+        if ts_iso not in seen or "RingConn" in src:
+            seen[ts_iso] = {"t": ts_iso, "hr": round(float(hr_val), 1)}
+
+    return sorted(seen.values(), key=lambda x: x["t"])
+
+
+def parse_sleep(
+    entries: list[dict],
+    target_date: str,
+    hr_entries: list[dict] | None = None,
+) -> dict:
     """
     Parse Apple Health sleep_analysis entries for target_date.
 
@@ -111,14 +154,23 @@ def parse_sleep(entries: list[dict], target_date: str) -> dict:
       "Awake"                        → awake time during sleep window
 
     qty field is in hours.
+    Also builds sleep_stages timeline, sleep_source, and sleep_hr (if hr_entries given).
     """
     ASLEEP  = {"Asleep", "AsleepUnspecified", "Core", "AsleepCore"}
     DEEP    = {"Deep", "AsleepDeep"}
     REM     = {"REM", "AsleepREM"}
     IN_BED  = {"In Bed", "InBed"}
     AWAKE   = {"Awake"}
+    STAGE_KEY = {
+        **{s: "core"  for s in ASLEEP},
+        **{s: "deep"  for s in DEEP},
+        **{s: "rem"   for s in REM},
+        **{s: "awake" for s in AWAKE},
+    }
 
     total_min = deep_min = rem_min = awake_min = 0.0
+    segments: list[dict] = []
+    sources_seen: set[str] = set()
 
     for entry in entries:
         ts = entry.get("date") or entry.get("startDate") or ""
@@ -129,6 +181,10 @@ def parse_sleep(entries: list[dict], target_date: str) -> dict:
         if entry_date != target_date:
             continue
 
+        stage_raw = entry.get("value") or ""
+        if stage_raw in IN_BED:
+            continue  # In Bed overlaps all stages — skip to avoid double-counting
+
         raw_qty = entry.get("qty") or entry.get("Qty")
         try:
             minutes = float(raw_qty) * 60.0
@@ -137,18 +193,38 @@ def parse_sleep(entries: list[dict], target_date: str) -> dict:
         if minutes <= 0:
             continue
 
-        stage = entry.get("value") or ""
-        if stage in DEEP:
+        stage_key = STAGE_KEY.get(stage_raw)
+        if not stage_key:
+            continue
+
+        src = entry.get("source", "")
+        if "RingConn" in src:
+            sources_seen.add("ring")
+        if "Apple Watch" in src:
+            sources_seen.add("watch")
+
+        if stage_key == "deep":
             total_min += minutes
             deep_min  += minutes
-        elif stage in REM:
+        elif stage_key == "rem":
             total_min += minutes
             rem_min   += minutes
-        elif stage in ASLEEP:
+        elif stage_key == "core":
             total_min += minutes
-        elif stage in AWAKE:
+        elif stage_key == "awake":
             awake_min += minutes
-        # IN_BED entries overlap with sleep stages — skip to avoid double-counting
+
+        # Build tz-aware timeline segment (best-effort — totals are unaffected if this fails)
+        start_raw = entry.get("start") or entry.get("startDate") or ts
+        end_raw   = entry.get("end")   or entry.get("endDate")   or ts
+        try:
+            start_iso = _parse_dt(start_raw).isoformat()
+            end_iso   = _parse_dt(end_raw).isoformat()
+            segments.append({"start": start_iso, "end": end_iso, "stage": stage_key})
+        except Exception:
+            pass
+
+    segments.sort(key=lambda x: x["start"])
 
     out: dict = {}
     if total_min > 0:
@@ -159,15 +235,35 @@ def parse_sleep(entries: list[dict], target_date: str) -> dict:
         out["sleep_rem_min"] = round(rem_min, 1)
     if awake_min > 0:
         out["sleep_awake_min"] = round(awake_min, 1)
+
+    if segments:
+        out["sleep_stages"] = json.dumps(segments)
+        if "ring" in sources_seen and "watch" in sources_seen:
+            out["sleep_source"] = "watch+ring"
+        elif "ring" in sources_seen:
+            out["sleep_source"] = "ring"
+        elif "watch" in sources_seen:
+            out["sleep_source"] = "watch"
+
+        if hr_entries:
+            sleep_hr = _extract_sleep_hr(hr_entries, segments[0]["start"], segments[-1]["end"])
+            if sleep_hr:
+                out["sleep_hr"] = json.dumps(sleep_hr)
+
     return out
 
 
 def _parse_sleep_from_payload(payload: dict, target_date: str) -> dict:
-    """Extract sleep fields from any payload that contains a sleep_analysis metric."""
-    for m in payload.get("data", {}).get("metrics") or []:
-        if m.get("name") == "sleep_analysis":
-            return parse_sleep(m.get("data") or [], target_date)
-    return {}
+    """Extract sleep + HR fields from any payload containing sleep_analysis."""
+    by_name = {
+        m["name"]: m.get("data") or []
+        for m in payload.get("data", {}).get("metrics") or []
+        if isinstance(m, dict) and "name" in m
+    }
+    sleep_entries = by_name.get("sleep_analysis")
+    if not sleep_entries:
+        return {}
+    return parse_sleep(sleep_entries, target_date, hr_entries=by_name.get("heart_rate"))
 
 
 def parse_metrics_payload(payload: dict, target_date: str) -> dict:
@@ -196,7 +292,7 @@ def parse_metrics_payload(payload: dict, target_date: str) -> dict:
 
     sleep_entries = by_name.get("sleep_analysis")
     if sleep_entries:
-        out.update(parse_sleep(sleep_entries, target_date))
+        out.update(parse_sleep(sleep_entries, target_date, hr_entries=by_name.get("heart_rate")))
 
     # RingConn sends weight as weight_body_mass in lbs; convert to kg as fallback
     if "body_weight_kg" not in out:
@@ -424,7 +520,7 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
 
     sleep_entries = merged.get("sleep_analysis")
     if sleep_entries:
-        out.update(parse_sleep(sleep_entries, target_date))
+        out.update(parse_sleep(sleep_entries, target_date, hr_entries=merged.get("heart_rate")))
 
     # RingConn sends weight as weight_body_mass in lbs; convert to kg as fallback
     if "body_weight_kg" not in out:
