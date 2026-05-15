@@ -66,7 +66,7 @@ function HevySession({ session }) {
   const topMuscles = [...new Set((session.exercises ?? []).map(e => e.primary_muscle_group))].slice(0, 3)
 
   return (
-    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 overflow-hidden">
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 overflow-hidden card">
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-slate-800/40 transition-colors"
@@ -162,7 +162,7 @@ function AppleSession({ session }) {
   ]
 
   return (
-    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 overflow-hidden">
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 overflow-hidden card">
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-slate-800/40 transition-colors"
@@ -246,7 +246,7 @@ export default function WorkoutLog({ sessions, loading }) {
     return (
       <section>
         <h3 className="text-slate-200 text-sm font-semibold mb-3 px-1">Workouts</h3>
-        <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 px-4 py-6 text-center text-slate-500 text-sm">
+        <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 px-4 py-6 text-center text-slate-500 text-sm card-lg">
           Rest day
         </div>
       </section>

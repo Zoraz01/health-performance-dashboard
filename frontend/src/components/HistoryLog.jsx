@@ -296,7 +296,7 @@ function ExpandableDay({ day }) {
   const workoutNames = (day.workouts || []).map(w => w.title ?? w.name).filter(Boolean)
 
   return (
-    <div ref={rowRef} className={`rounded-xl ring-1 transition-all duration-200 overflow-hidden ${open ? 'ring-slate-600 bg-slate-900' : 'ring-slate-800 bg-slate-900/60 hover:ring-slate-700'}`}>
+    <div ref={rowRef} className={`rounded-xl ring-1 transition-all duration-200 overflow-hidden card ${open ? 'ring-slate-600 bg-slate-900' : 'ring-slate-800 bg-slate-900/60 hover:ring-slate-700'}`}>
       <button
         onClick={toggle}
         className="w-full px-4 py-3 flex items-center gap-3 text-left"
@@ -436,7 +436,7 @@ function MonthSection({ monthKey, days }) {
   const selectedDay = selectedDate ? dayMap[selectedDate] : null
 
   return (
-    <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden">
+    <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden card-lg">
       {/* Month header */}
       <button
         className="w-full px-5 py-4 flex items-center gap-4 hover:bg-slate-800/40 transition-colors text-left"
@@ -600,7 +600,7 @@ export default function HistoryLog() {
 
   if (!days.length) {
     return (
-      <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 px-5 py-10 text-center">
+      <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 px-5 py-10 text-center card-lg">
         <p className="text-slate-500 text-sm">No history yet — data will appear once Apple Health starts syncing.</p>
       </section>
     )

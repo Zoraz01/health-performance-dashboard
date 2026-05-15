@@ -234,14 +234,14 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
   return (
     <>
       {!loading && !submitted && (
-        <div className="bg-amber-500/20 border-b border-amber-500/35 px-5 py-2.5 flex items-center justify-between gap-4">
+        <div className="checkin-banner px-5 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
-            <span className="text-amber-100 text-sm font-medium">Rate your muscle soreness for today</span>
+            <span className="checkin-banner-dot w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" />
+            <span className="checkin-banner-text text-sm font-medium">Rate your muscle soreness for today</span>
           </div>
           <button
             onClick={() => setOpen(true)}
-            className="px-3 py-1 rounded-lg bg-amber-500/30 hover:bg-amber-500/45 text-amber-100 text-xs font-semibold transition-colors shrink-0"
+            className="checkin-banner-btn px-3 py-1 rounded-lg text-xs font-semibold shrink-0"
           >
             Check in
           </button>

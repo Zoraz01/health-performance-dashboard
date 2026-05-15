@@ -32,7 +32,7 @@ function Skeleton() {
           <div className="h-5 w-12 bg-slate-800 rounded-full" />
         </div>
       </div>
-      <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden divide-y divide-slate-800/50">
+      <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden divide-y divide-slate-800/50 card-lg">
         {rows.map((w, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-2.5">
             <div className="w-24 shrink-0 space-y-1.5">
@@ -71,7 +71,7 @@ export default function RecoveryStatus({ data, loading }) {
           <StatusChip count={ready}      label="ready"      theme="green" />
         </div>
       </div>
-      <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden divide-y divide-slate-800/50">
+      <div className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden divide-y divide-slate-800/50 card-lg">
         {entries.map(([muscle, info]) => (
           <div key={muscle} className="flex items-center gap-3 px-4 py-2.5">
             <div className="w-24 shrink-0">

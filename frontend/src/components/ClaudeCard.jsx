@@ -62,7 +62,7 @@ function ScoreBar({ label, score, tip, wide }) {
             </button>
           )}
           {open && tip && (
-            <div className="absolute left-0 top-5 z-30 w-56 rounded-lg bg-slate-900 ring-1 ring-slate-700 px-3 py-2 shadow-xl pointer-events-none">
+            <div className="absolute left-0 top-5 z-30 w-56 rounded-lg bg-slate-900 ring-1 ring-slate-700/80 px-3 py-2 pointer-events-none card-lg">
               <p className="text-[11px] text-slate-300 leading-relaxed">{tip}</p>
             </div>
           )}
@@ -72,7 +72,7 @@ function ScoreBar({ label, score, tip, wide }) {
           <span className="text-slate-500 text-xs font-normal">/10</span>
         </span>
       </div>
-      <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden track-inset">
         <div
           className={`h-full ${bar} rounded-full transition-all duration-700 ease-out`}
           style={{ width: `${pct}%` }}
@@ -94,11 +94,13 @@ function WarningIcon({ className = '' }) {
 
 function ClaudeMark() {
   return (
-    <div className="relative w-7 h-7 shrink-0">
+    <div
+      className="relative w-7 h-7 shrink-0"
+      style={{ filter: 'drop-shadow(0 0 8px rgba(238,172,60,0.45))' }}
+    >
       <div className="absolute inset-0 rounded-md bg-linear-to-br from-amber-300/90 to-orange-500/80" />
       <div className="absolute inset-0 grid place-items-center">
         <svg viewBox="0 0 16 16" className="w-4 h-4 text-slate-950" fill="currentColor">
-          {/* 4-point sparkle — universally reads as AI/generated */}
           <path d="M8 1 L9.4 6.6 L15 8 L9.4 9.4 L8 15 L6.6 9.4 L1 8 L6.6 6.6 Z" />
         </svg>
       </div>
@@ -132,7 +134,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
     return (
       <section
         aria-busy="true"
-        className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7"
+        className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7 card-lg"
         style={{ minHeight: 540 }}
       >
         <div className="flex items-center gap-3 mb-6">
@@ -193,7 +195,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
   )
 
   return (
-    <section className="rounded-2xl bg-linear-to-b from-slate-900/90 to-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7 shadow-2xl shadow-black/30">
+    <section className="rounded-2xl bg-linear-to-b from-slate-900/90 to-slate-900/60 ring-1 ring-slate-800 p-6 sm:p-7 card-lg">
       <header className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <ClaudeMark />

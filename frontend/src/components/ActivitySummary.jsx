@@ -54,7 +54,7 @@ function Metric({ icon: I, value, sub, label, accent = 'text-slate-400' }) {
 
 function Skeleton() {
   return (
-    <section className="as-root rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden animate-pulse">
+    <section className="as-root rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden card-lg animate-pulse">
       {/* Header skeleton */}
       <div className="px-4 sm:px-5 pt-4 pb-3 flex items-end justify-between flex-wrap gap-x-4 gap-y-2 border-b border-slate-800/60">
         <div className="space-y-2">
@@ -103,7 +103,7 @@ export default function ActivitySummary({ data, loading }) {
   ]
 
   return (
-    <section className="as-root rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden">
+    <section className="as-root rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 overflow-hidden card-lg">
       <div className="px-4 sm:px-5 pt-4 pb-3 flex items-end justify-between flex-wrap gap-x-4 gap-y-2 border-b border-slate-800/60">
         <div className="min-w-0">
           <div className="text-[10.5px] uppercase tracking-[0.18em] text-slate-500 font-medium">Yesterday</div>

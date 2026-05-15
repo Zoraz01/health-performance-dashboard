@@ -47,7 +47,7 @@ function LoadingChart({ height = 180 }) {
 
 function CardShell({ title, sub, children, note }) {
   return (
-    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
+    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 card-lg">
       <div className="flex items-start justify-between mb-5">
         <div>
           <h3 className="text-slate-200 text-sm font-semibold">{title}</h3>

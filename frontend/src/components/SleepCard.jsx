@@ -221,7 +221,7 @@ export default function SleepCard({ data }) {
 
   if (!hasData) {
     return (
-      <section className="relative rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 overflow-hidden">
+      <section className="relative rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 overflow-hidden card-lg">
         <div className="opacity-30 pointer-events-none">
           <div className="flex items-baseline justify-between mb-4">
             <div>
@@ -275,7 +275,7 @@ export default function SleepCard({ data }) {
   const barPct = (mins) => total > 0 ? `${Math.round((mins / total) * 100)}%` : '0%'
 
   return (
-    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
+    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 card-lg">
       <div className="flex items-baseline justify-between mb-1">
         <div>
           <h3 className="text-slate-200 text-sm font-semibold">Sleep last night</h3>

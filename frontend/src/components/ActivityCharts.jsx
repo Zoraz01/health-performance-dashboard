@@ -84,7 +84,7 @@ export default function ActivityCharts({ history: historyProp }) {
   const delta  = latest != null && prev != null ? latest - prev : null
 
   return (
-    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
+    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 card-lg">
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-slate-200 text-sm font-semibold">Activity Trends</h3>

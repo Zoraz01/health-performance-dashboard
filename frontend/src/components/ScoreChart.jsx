@@ -22,7 +22,7 @@ function ScoreTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null
   const d = payload[0].payload
   return (
-    <div className="rounded-lg bg-slate-950/95 ring-1 ring-slate-700 shadow-xl px-3.5 py-3 text-xs min-w-[180px]">
+    <div className="rounded-lg bg-slate-950/95 ring-1 ring-slate-700/80 px-3.5 py-3 text-xs min-w-[180px] card-lg">
       <div className="text-slate-300 font-medium mb-2 text-[12px]">{fullDate(d.date)}</div>
       <div className="space-y-1.5">
         {SCORE_ROWS.map((row) => {
@@ -60,7 +60,7 @@ export default function ScoreChart({ history: historyProp }) {
     : 0
 
   return (
-    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6">
+    <section className="rounded-2xl bg-slate-900/60 ring-1 ring-slate-800 p-5 sm:p-6 card-lg">
       <div className="flex items-baseline justify-between mb-5">
         <div>
           <h3 className="text-slate-200 text-sm font-semibold">30-Day Score Trend</h3>

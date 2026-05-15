@@ -200,6 +200,33 @@ body {
   }
 }
 
+/* ── Check-in banner — mode-aware semantic classes ───────────────────────── */
+/* Uses CSS variable amber so it adapts to dark/light palette automatically.   */
+.checkin-banner {
+  background: rgb(var(--w-400) / 0.18);
+  border-bottom: 1px solid rgb(var(--w-400) / 0.28);
+}
+.checkin-banner-text { color: rgb(255 255 255 / 0.92); }
+.checkin-banner-dot  { background-color: rgb(var(--w-400)); }
+.checkin-banner-btn {
+  background: rgb(var(--w-400) / 0.28);
+  color: rgb(255 255 255 / 0.92);
+  transition: background 0.15s ease;
+}
+.checkin-banner-btn:hover { background: rgb(var(--w-400) / 0.44); }
+
+.light .checkin-banner {
+  background: rgb(var(--w-400) / 0.08);
+  border-bottom: 1px solid rgb(var(--w-400) / 0.22);
+}
+.light .checkin-banner-text { color: rgb(var(--w-400)); }
+.light .checkin-banner-dot  { background-color: rgb(var(--w-400)); }
+.light .checkin-banner-btn {
+  background: rgb(var(--w-400) / 0.1);
+  color: rgb(var(--w-400));
+}
+.light .checkin-banner-btn:hover { background: rgb(var(--w-400) / 0.2); }
+
 /* ── Light mode card border fix — ring-slate-800 is too close to card bg ─── */
 /* Bone s-500 (165,153,138) provides enough contrast on the cream background. */
 .light .ring-slate-800 {
@@ -216,6 +243,77 @@ body {
 /* ── Scrollbar hide utility ──────────────────────────────────────────────── */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Depth system — card shadows and status glows ─────────────────────────── */
+/* Multi-layer shadow: contact (0-2px) + midfield (4-12px) + inset edge-light. */
+.card {
+  box-shadow:
+    0 1px 2px  rgb(0 0 0 / 0.5),
+    0 4px 12px rgb(0 0 0 / 0.25),
+    inset 0 1px 0 rgb(255 255 255 / 0.055);
+}
+.card-lg {
+  box-shadow:
+    0 2px 4px  rgb(0 0 0 / 0.5),
+    0 8px 24px rgb(0 0 0 / 0.28),
+    0 24px 48px rgb(0 0 0 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.065);
+}
+.card-interactive {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-interactive:hover {
+  box-shadow:
+    0 2px 6px  rgb(0 0 0 / 0.55),
+    0 8px 20px rgb(0 0 0 / 0.32),
+    0 20px 36px rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+  transform: translateY(-1px);
+}
+
+/* Status indicator glows — dots */
+.dot-ok   { box-shadow: 0 0 0 2px rgb(var(--ok-400) / 0.15), 0 0 7px 1px rgb(var(--ok-400) / 0.5); }
+.dot-warn { box-shadow: 0 0 0 2px rgb(var(--w-400)  / 0.15), 0 0 7px 1px rgb(var(--w-400)  / 0.5); }
+.dot-bad  { box-shadow: 0 0 0 2px rgb(var(--e-400)  / 0.15), 0 0 7px 1px rgb(var(--e-400)  / 0.5); }
+
+/* Status badge glow — pills */
+.pill-ok   { box-shadow: 0 0 10px rgb(var(--ok-400) / 0.28); }
+.pill-warn { box-shadow: 0 0 10px rgb(var(--w-400)  / 0.28); }
+.pill-bad  { box-shadow: 0 0 10px rgb(var(--e-400)  / 0.28); }
+
+/* Recessed track for progress bars */
+.track-inset {
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.45);
+}
+
+/* Light mode — much softer, warm shadows */
+.light .card {
+  box-shadow:
+    0 1px 2px  rgb(0 0 0 / 0.07),
+    0 4px 12px rgb(0 0 0 / 0.05),
+    inset 0 1px 0 rgb(255 255 255 / 0.85);
+}
+.light .card-lg {
+  box-shadow:
+    0 2px 4px  rgb(0 0 0 / 0.07),
+    0 8px 24px rgb(0 0 0 / 0.08),
+    0 24px 48px rgb(0 0 0 / 0.04),
+    inset 0 1px 0 rgb(255 255 255 / 0.9);
+}
+.light .card-interactive:hover {
+  box-shadow:
+    0 2px 6px  rgb(0 0 0 / 0.09),
+    0 8px 24px rgb(0 0 0 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+  transform: translateY(-1px);
+}
+.light .dot-ok,
+.light .dot-warn,
+.light .dot-bad  { box-shadow: none; }
+.light .pill-ok,
+.light .pill-warn,
+.light .pill-bad { box-shadow: none; }
+.light .track-inset { box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12); }
 
 /* ── Theme circular-reveal transition ────────────────────────────────────── */
 /* Expands the incoming theme as a circle from the toggle button position.   */

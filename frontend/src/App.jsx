@@ -43,6 +43,43 @@ function FitPulseLogo({ className = 'w-4 h-4' }) {
   )
 }
 
+function CalendarIcon(p) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <rect x="3" y="4.5" width="14" height="12" rx="2" />
+      <path d="M3 8.5h14M7 2.5v4M13 2.5v4" />
+    </svg>
+  )
+}
+
+function TrendsIcon(p) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M3 14.5l4-4.5 3.5 2.5 3.5-5L17 11" />
+      <path d="M3 17h14" />
+    </svg>
+  )
+}
+
+function HistoryIcon(p) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M10 7v3.5l2.5 2" />
+    </svg>
+  )
+}
+
+function LogoutIcon(p) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M10 8H2M6 5l-3 3 3 3M11 5V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1"/>
+    </svg>
+  )
+}
+
+const TAB_ICON = { Yesterday: CalendarIcon, Trends: TrendsIcon, History: HistoryIcon }
+
 export default function App() {
   const [activeTab, setActiveTab]     = useState('Yesterday')
   const [checkInOpen, setCheckInOpen] = useState(false)
@@ -173,7 +210,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
 
       {/* Mobile top bar */}
-      <div className="lg:hidden border-b border-slate-800/60">
+      <div className="lg:hidden border-b border-slate-800/60 shadow-[0_4px_16px_rgb(0_0_0/0.35)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <div
@@ -184,7 +221,7 @@ export default function App() {
             </div>
             <span className="text-[13px] font-semibold tracking-tight text-slate-100">FitPulse</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setCheckInOpen(true)}
               className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
@@ -193,16 +230,23 @@ export default function App() {
             </button>
             <button
               onClick={e => toggle(e.currentTarget)}
-              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors"
+              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
             >
               {isDark ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={logout}
+              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-red-400 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
+              title="Sign out"
+            >
+              <LogoutIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Desktop top nav — centered, tabs in middle */}
-      <nav className="hidden lg:block sticky top-0 z-30 border-b border-slate-800/60 backdrop-blur-md bg-slate-950/80">
+      <nav className="hidden lg:block sticky top-0 z-30 border-b border-slate-800/60 backdrop-blur-xl bg-slate-950/85 shadow-[0_4px_24px_rgb(0_0_0/0.45)]">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center">
           {/* Logo — left */}
           <div className="flex items-center gap-2.5 w-52 shrink-0">
@@ -219,14 +263,14 @@ export default function App() {
           </div>
           {/* Tabs — center */}
           <div className="flex-1 flex justify-center">
-            <div className="flex gap-0.5 bg-slate-900/80 ring-1 ring-slate-800 rounded-lg p-0.5">
+            <div className="flex gap-0.5 bg-slate-900/80 ring-1 ring-slate-800 rounded-lg p-0.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.04),0_2px_8px_rgb(0_0_0/0.35)]">
               {TABS.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
                     activeTab === tab
-                      ? 'bg-slate-800 text-slate-100'
+                      ? 'bg-slate-800 text-slate-100 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_1px_6px_rgb(0_0_0/0.4)]'
                       : 'text-slate-500 hover:text-slate-200'
                   }`}
                 >
@@ -245,19 +289,17 @@ export default function App() {
             </button>
             <button
               onClick={e => toggle(e.currentTarget)}
-              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors"
+              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
             </button>
             <button
               onClick={logout}
-              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-red-400 transition-colors"
+              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-red-400 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
               title="Sign out"
             >
-              <svg viewBox="0 0 16 16" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 8H2M6 5l-3 3 3 3M11 5V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-1"/>
-              </svg>
+              <LogoutIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -323,21 +365,29 @@ export default function App() {
       </main>
 
       {/* Mobile bottom nav — fixed so it's always visible */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800/60 bg-slate-950/95 backdrop-blur-md">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800/60 bg-slate-950/95 backdrop-blur-xl shadow-[0_-4px_20px_rgb(0_0_0/0.5)]">
         <div className="flex" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-5 text-xs font-medium transition-colors ${
-                activeTab === tab
-                  ? 'text-slate-100 border-t-2 border-amber-400 -mt-px'
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const Icon = TAB_ICON[tab]
+            const active = activeTab === tab
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative transition-colors ${
+                  active ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {active && (
+                  <span className="absolute top-0 left-1/4 right-1/4 h-0.5 rounded-b-full bg-amber-400" />
+                )}
+                <Icon className="w-5 h-5" />
+                <span className={`text-[10px] leading-none tracking-wide ${active ? 'font-bold' : 'font-medium'}`}>
+                  {tab}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </nav>
     </div>

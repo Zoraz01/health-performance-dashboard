@@ -40,12 +40,15 @@ const STATUS_THEME = {
   },
 }
 
+const DOT_GLOW  = { good: 'dot-ok',   warn: 'dot-warn',  bad: 'dot-bad'  }
+const PILL_GLOW = { good: 'pill-ok',  warn: 'pill-warn', bad: 'pill-bad' }
+
 function MiniBar({ value, baseline, max, status }) {
   const valuePct = Math.min(100, Math.max(4, (value / max) * 100))
   const basePct = Math.min(100, (baseline / max) * 100)
   const fill = { good: 'bg-emerald-400/80', warn: 'bg-amber-400/80', bad: 'bg-red-400/80' }[status]
   return (
-    <div className="relative h-1 w-full bg-slate-800/80 rounded-full mt-3">
+    <div className="relative h-1 w-full bg-slate-800/80 rounded-full mt-3 track-inset">
       <div className={`absolute inset-y-0 left-0 ${fill} rounded-full transition-all duration-700`} style={{ width: `${valuePct}%` }} />
       <div className="absolute -top-1 -bottom-1 w-px bg-slate-500" style={{ left: `${basePct}%` }} title={`30-day avg: ${baseline}`} />
     </div>
@@ -59,13 +62,13 @@ function RecoveryCard({ name, value, unit, baseline, betterIsHigher, max, format
   const deltaSign = delta >= 0 ? '+' : ''
   const arrowDir = delta >= 0 ? 'up' : 'down'
   return (
-    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-3 sm:p-4">
+    <div className={`rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-3 sm:p-4 card card-interactive`}>
       <div className="flex items-start justify-between gap-1.5 mb-2.5">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold truncate">{name}</div>
           <div className="text-slate-400 text-[9.5px] mt-0.5 font-mono">avg {format(baseline)}{unit && ` ${unit}`}</div>
         </div>
-        <span className={`inline-flex items-center gap-0.5 rounded-full ring-1 px-1.5 py-0.5 text-[9.5px] font-medium shrink-0 ${theme.pillBg}`}>
+        <span className={`inline-flex items-center gap-0.5 rounded-full ring-1 px-1.5 py-0.5 text-[9.5px] font-medium shrink-0 ${theme.pillBg} ${PILL_GLOW[status]}`}>
           <TrendArrow dir={arrowDir} className="w-2 h-2" />
           {deltaSign}{delta.toFixed(1)}%
         </span>
@@ -76,7 +79,7 @@ function RecoveryCard({ name, value, unit, baseline, betterIsHigher, max, format
       </div>
       <MiniBar value={value} baseline={baseline} max={max} status={status} />
       <div className="flex items-center gap-1 mt-2.5">
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot} ${DOT_GLOW[status]}`} />
         <span className="text-[10px] text-slate-400 truncate">{theme.label}</span>
       </div>
     </div>
@@ -98,7 +101,7 @@ function spo2Color(pct) {
 
 function InlineStatRow({ label, value, unit, color, dot, statusLabel, source }) {
   return (
-    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5 flex items-center justify-between gap-4">
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5 flex items-center justify-between gap-4 card">
       <div>
         <div className="text-[10.5px] uppercase tracking-[0.16em] text-slate-500 font-semibold">{label}</div>
         {source && <div className="text-slate-600 text-[9.5px] font-mono mt-0.5">{source}</div>}
