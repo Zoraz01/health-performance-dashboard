@@ -42,7 +42,13 @@ async def get_data_record(response: Response, user: dict = Depends(get_current_u
     uid = user["id"]
     today     = datetime.now(sched.LOCAL_TZ).date().isoformat()
     yesterday = (date_cls.fromisoformat(today) - timedelta(days=1)).isoformat()
-    record    = database.get_daily_record(today, user_id=uid) or database.get_daily_record(yesterday, user_id=uid)
+    today_rec     = database.get_daily_record(today,     user_id=uid)
+    yesterday_rec = database.get_daily_record(yesterday, user_id=uid)
+    # Prefer today's record only if analysis is complete; otherwise show yesterday's
+    if today_rec and today_rec.get("score_overall") is not None:
+        record = today_rec
+    else:
+        record = yesterday_rec or today_rec
     return {"record": record}
 
 

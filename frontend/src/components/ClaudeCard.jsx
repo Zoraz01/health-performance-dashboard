@@ -157,10 +157,10 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
         <div className="rounded-lg border border-dashed border-slate-700/70 bg-slate-900/40 px-5 py-8 text-center">
           <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
             Yesterday's debrief runs at <span className="text-slate-200 font-medium">3am</span> — after
-            Hevy syncs at 2am and Apple Health data is complete.
+            the final Hevy sync and Apple Health data is complete.
           </p>
           <p className="text-slate-600 text-xs mt-3 font-mono uppercase tracking-wider">
-            no analysis yet · check back at 3am
+            no analysis yet · runs nightly at 3am
           </p>
           <div className="mt-5 flex flex-col items-center gap-2">
             <button
@@ -210,7 +210,7 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           {analysis.date && analysis.date !== date
             ? `for ${formatDate(analysis.date)}`
-            : 'nightly 3am'}
+            : 'updated nightly'}
         </div>
       </header>
 
