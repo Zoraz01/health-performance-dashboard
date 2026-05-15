@@ -5,9 +5,9 @@ import { shortDate } from '../lib/formatters'
 import { useChartColors } from '../lib/chartColors'
 
 const BASE_TABS = [
-  { key: 'steps',           label: 'Steps',      unit: '',     color: '#38bdf8', fmt: v => Math.round(v).toLocaleString() },
-  { key: 'active_calories', label: 'Calories',   unit: 'kcal', color: '#fb923c', fmt: v => `${Math.round(v)}` },
-  { key: 'hrv_ms',          label: 'HRV',        unit: 'ms',   color: '#a78bfa', fmt: v => v.toFixed(1) },
+  { key: 'steps',           label: 'Steps',      unit: '',     color: '#38b6f0', fmt: v => Math.round(v).toLocaleString() },
+  { key: 'active_calories', label: 'Calories',   unit: 'kcal', color: '#f58c28', fmt: v => `${Math.round(v)}` },
+  { key: 'hrv_ms',          label: 'HRV',        unit: 'ms',   color: '#8260f8', fmt: v => v.toFixed(1) },
   { key: 'resting_hr',      label: 'Resting HR', unit: 'bpm',  color: '#f43f5e', fmt: v => Math.round(v).toString() },
   { key: 'body_weight_lbs', label: 'Weight',     unit: 'lbs',  color: '#34d399', fmt: v => v.toFixed(1) },
   { key: 'spo2',            label: 'SpO₂',       unit: '%',    color: '#60a5fa', fmt: v => v.toFixed(1) },

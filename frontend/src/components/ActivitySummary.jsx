@@ -33,11 +33,6 @@ const Icon = {
       <path d="M3 16h4v-3h4v-3h4V7h2"/>
     </svg>
   ),
-  Heart: (p) => (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...p}>
-      <path d="M10 15.5C9.6 15.1 4 11 4 7.5A3.5 3.5 0 0 1 10 5a3.5 3.5 0 0 1 6 2.5c0 3.5-5.6 7.6-6 8Z"/>
-    </svg>
-  ),
 }
 
 function Metric({ icon: I, value, sub, label, accent = 'text-slate-400' }) {
@@ -102,12 +97,9 @@ export default function ActivitySummary({ data, loading }) {
     { icon: Icon.Steps,  value: Math.round(data.steps ?? 0).toLocaleString(), label: 'Steps',        accent: 'text-sky-400'     },
     { icon: Icon.Flame,  value: Math.round(data.active_calories ?? 0),        label: 'Active kcal',  accent: 'text-orange-400'  },
     { icon: Icon.Clock,  value: data.exercise_minutes != null ? Math.round(data.exercise_minutes) : '—', label: 'Exercise min', accent: 'text-emerald-400' },
-    { icon: Icon.Stand,  value: data.stand_hours != null ? Math.round(data.stand_hours) : '—', sub: `/ ${data.stand_goal ?? 12}`, label: 'Stand hrs', accent: 'text-cyan-400' },
+    { icon: Icon.Stand,  value: data.stand_hours != null ? Math.round(data.stand_hours) : '—', sub: `/ ${data.stand_goal ?? 12}`, label: 'Stand hrs', accent: 'text-pink-400' },
     { icon: Icon.Route,  value: data.distance_mi != null ? data.distance_mi.toFixed(1) : '—', label: 'Distance mi', accent: 'text-violet-400' },
-    { icon: Icon.Stairs, value: data.flights_climbed != null ? Math.round(data.flights_climbed) : '—', label: 'Flights', accent: 'text-amber-400' },
-    ...(data.avg_heart_rate != null ? [
-      { icon: Icon.Heart, value: Math.round(data.avg_heart_rate), sub: 'bpm', label: 'Avg HR', accent: 'text-red-400' },
-    ] : []),
+    { icon: Icon.Stairs, value: data.flights_climbed != null ? Math.round(data.flights_climbed) : '—', label: 'Flights', accent: 'text-sky-300' },
   ]
 
   return (
@@ -118,6 +110,14 @@ export default function ActivitySummary({ data, loading }) {
           <h1 className="text-2xl sm:text-3xl font-semibold text-slate-100 mt-0.5 tracking-tight">{dateStr}</h1>
         </div>
         <div className="flex items-center gap-4 sm:gap-5">
+          {data.avg_heart_rate != null && (
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500">Avg HR</div>
+              <div className="text-amber-300 text-base font-semibold tabular-nums">
+                {Math.round(data.avg_heart_rate)} <span className="text-slate-500 text-xs">bpm</span>
+              </div>
+            </div>
+          )}
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-widest text-slate-500">HRV</div>
             <div className="text-amber-300 text-base font-semibold tabular-nums">

@@ -45,22 +45,22 @@ const MUSCLE_LABELS = {
   upper_arms: 'Upper Arms',
 }
 
-// Recovery mode — rich emerald / amber / rose
+// Recovery mode — bright enough to read on matte 3D surface under mixed lighting
 const REC = {
-  ready:   '#10b981',  // emerald-500 — vibrant, natural "good"
-  partial: '#f59e0b',  // amber-500 — warm, readable in both themes
-  fatigued:'#f43f5e',  // rose-500 — vivid, more dramatic than flat red
-  noData:  '#4b5563',  // gray-600 — neutral mid-dark, works in dark + light
-  hover:   '#bfdbfe',  // blue-200 — soft cool glow
+  ready:   '#14d494',  // emerald brightened — clear figure-ground vs teal-black bg
+  partial: '#f5a623',  // amber, slightly warmer — distinct from scene teal
+  fatigued:'#f43f5e',  // rose-500 — keep vivid for 3D impact
+  noData:  '#3d6370',  // teal-grey — tonally coherent with scene background
+  hover:   '#fef3c7',  // warm cream emissive — "lit from within" selection feel
 }
 
-// Volume mode — cool → mid → warm heatmap
+// Volume mode — perceptual cool→warm temperature ramp
 const VOL = {
   none:  '#1e293b',  // slate-800 — near-invisible "untrained"
-  low:   '#22d3ee',  // cyan-400 — cool, clearly "low"
-  mid:   '#a78bfa',  // violet-400 — mid-range bridge
-  high:  '#fb923c',  // orange-400 — warm, clearly "high"
-  hover: '#bfdbfe',  // blue-200 — same soft cool glow
+  low:   '#7eb8f7',  // steel periwinkle-blue — distinct from recovery teal (38° hue gap)
+  mid:   '#9b6fff',  // violet, lighter than pure #8260f8 for smoother ramp
+  high:  '#f58c28',  // matches system a3-400 orange exactly
+  hover: '#fef3c7',  // same warm cream — consistent selection language across modes
 }
 
 const SCENE_BG = { dark: '#0c242c', light: '#c2b8ac' }
@@ -302,7 +302,7 @@ export default function MuscleMap3D({ data, historyDays = 0 }) {
         <SceneBg isDark={isDark} />
         <ambientLight intensity={0.65} />
         <directionalLight position={[2, 4, 3]} intensity={1.5} />
-        <directionalLight position={[-2, 2, -2]} intensity={0.45} color="#6090ff" />
+        <directionalLight position={[-2, 2, -2]} intensity={0.45} color="#5b9fd6" />
 
         <Bounds fit clip observe margin={0.85}>
           <Body

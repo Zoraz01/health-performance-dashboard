@@ -25,14 +25,14 @@
   --e-400:  232 108 96;
   --e-500:  208 76 64;
   --e-600:  172 46 36;
-  --a1-300: 138 218 248;
-  --a1-400: 78 188 232;
-  --a2-300: 192 178 252;
-  --a2-400: 152 132 240;
-  --a3-300: 252 188 138;
-  --a3-400: 240 152 88;
-  --a4-300: 108 232 232;
-  --a4-400: 44 198 208;
+  --a1-300: 122 210 252;
+  --a1-400: 56 182 240;
+  --a2-300: 174 148 255;
+  --a2-400: 130 96 248;
+  --a3-300: 255 172 88;
+  --a3-400: 245 140 40;
+  --a4-300: 252 142 172;
+  --a4-400: 240 96 138;
   --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -64,14 +64,14 @@
   --e-400:  239 68 68;
   --e-500:  220 38 38;
   --e-600:  185 28 28;
-  --a1-300: 56 189 248;  /* sky — bright blue */
-  --a1-400: 14 165 233;
-  --a2-300: 192 132 252; /* violet — vivid purple */
-  --a2-400: 167 139 250;
-  --a3-300: 251 146 60;  /* orange — vivid orange */
-  --a3-400: 249 115 22;
-  --a4-300: 94 234 212;  /* teal — vivid teal */
-  --a4-400: 45 212 191;
+  --a1-300: 2 168 240;   /* sky — cooler, high contrast on cream */
+  --a1-400: 2 144 210;
+  --a2-300: 100 56 220;  /* violet — deep electric purple, WCAG AA on cream */
+  --a2-400: 80 36 196;
+  --a3-300: 234 124 28;  /* orange — vivid, WCAG AA on cream */
+  --a3-400: 214 96 8;
+  --a4-300: 200 40 100;  /* rose — high contrast on cream, distinct from teal */
+  --a4-400: 172 20 76;
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
@@ -127,9 +127,9 @@
   --color-orange-300: rgb(var(--a3-300));
   --color-orange-400: rgb(var(--a3-400));
 
-  /* Cyan (accent 4) */
-  --color-cyan-300: rgb(var(--a4-300));
-  --color-cyan-400: rgb(var(--a4-400));
+  /* Pink/rose (accent 4 — Stand Hours) */
+  --color-pink-300: rgb(var(--a4-300));
+  --color-pink-400: rgb(var(--a4-400));
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */

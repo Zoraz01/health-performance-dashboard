@@ -92,16 +92,45 @@ function ScoreBar({ label, value, color }) {
   )
 }
 
-function SleepBar({ deep, rem, core, awake }) {
+const STAGE_COLORS = {
+  deep:  '#818cf8',
+  rem:   '#8260f8',
+  core:  '#38b6f0',
+  awake: '#fbbf24',
+}
+
+function MiniHypnogram({ stages, deep, rem, core, awake }) {
+  if (stages) {
+    let segments = []
+    try { segments = JSON.parse(stages) } catch {}
+    if (segments.length > 0) {
+      const startMs = new Date(segments[0].start).getTime()
+      const endMs   = new Date(segments[segments.length - 1].end).getTime()
+      const totalMs = endMs - startMs
+      if (totalMs > 0) {
+        return (
+          <div className="flex rounded overflow-hidden h-2 w-full">
+            {segments.map((seg, i) => {
+              const segMs = new Date(seg.end).getTime() - new Date(seg.start).getTime()
+              const w = Math.max(0.3, (segMs / totalMs) * 100)
+              return (
+                <div key={i} style={{ width: `${w}%`, background: STAGE_COLORS[seg.stage] ?? '#64748b', flexShrink: 0 }} />
+              )
+            })}
+          </div>
+        )
+      }
+    }
+  }
   const total = (deep ?? 0) + (rem ?? 0) + (core ?? 0) + (awake ?? 0)
   if (!total) return null
   const pct = (v) => `${((v / total) * 100).toFixed(1)}%`
   return (
     <div className="flex rounded overflow-hidden h-2 w-full">
-      {deep  > 0 && <div style={{ width: pct(deep),  background: '#818cf8' }} />}
-      {rem   > 0 && <div style={{ width: pct(rem),   background: '#a78bfa' }} />}
-      {core  > 0 && <div style={{ width: pct(core),  background: '#38bdf8' }} />}
-      {awake > 0 && <div style={{ width: pct(awake), background: '#fbbf24' }} />}
+      {deep  > 0 && <div style={{ width: pct(deep),  background: STAGE_COLORS.deep  }} />}
+      {rem   > 0 && <div style={{ width: pct(rem),   background: STAGE_COLORS.rem   }} />}
+      {core  > 0 && <div style={{ width: pct(core),  background: STAGE_COLORS.core  }} />}
+      {awake > 0 && <div style={{ width: pct(awake), background: STAGE_COLORS.awake }} />}
     </div>
   )
 }
@@ -170,22 +199,22 @@ function DayDetail({ day, record, loadingRecord }) {
       {hasSleep && (
         <DetailSection title="Sleep">
           <div className="space-y-2">
-            <SleepBar deep={sleepDeep} rem={sleepRem} core={sleepCore} awake={sleepAwake} />
+            <MiniHypnogram stages={day.sleep_stages} deep={sleepDeep} rem={sleepRem} core={sleepCore} awake={sleepAwake} />
             <div className="flex gap-4 flex-wrap">
               <span className="flex items-center gap-1.5 text-[10.5px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-sm bg-indigo-400 inline-block" />
+                <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: STAGE_COLORS.deep }} />
                 Deep {fmtMin(sleepDeep)}
               </span>
               <span className="flex items-center gap-1.5 text-[10.5px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-sm bg-violet-400 inline-block" />
+                <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: STAGE_COLORS.rem }} />
                 REM {fmtMin(sleepRem)}
               </span>
               <span className="flex items-center gap-1.5 text-[10.5px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-sm bg-sky-400 inline-block" />
+                <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: STAGE_COLORS.core }} />
                 Core {fmtMin(sleepCore)}
               </span>
               <span className="flex items-center gap-1.5 text-[10.5px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-sm bg-amber-400 inline-block" />
+                <span className="w-1.5 h-1.5 rounded-sm inline-block" style={{ background: STAGE_COLORS.awake }} />
                 Awake {fmtMin(sleepAwake)}
               </span>
               <span className="text-[10.5px] text-slate-500 font-semibold">
@@ -518,6 +547,7 @@ export default function HistoryLog() {
             sleep_deep_min:   s.sleep_deep_min,
             sleep_rem_min:    s.sleep_rem_min,
             sleep_awake_min:  s.sleep_awake_min,
+            sleep_stages:     s.sleep_stages ?? null,
             // training
             muscle_volume:    s.muscle_volume,
             recovery_status:  s.recovery_status,

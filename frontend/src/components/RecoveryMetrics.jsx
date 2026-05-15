@@ -59,25 +59,25 @@ function RecoveryCard({ name, value, unit, baseline, betterIsHigher, max, format
   const deltaSign = delta >= 0 ? '+' : ''
   const arrowDir = delta >= 0 ? 'up' : 'down'
   return (
-    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div>
-          <div className="text-[10.5px] uppercase tracking-[0.16em] text-slate-500 font-semibold">{name}</div>
-          <div className="text-slate-400 text-[10px] mt-0.5 font-mono">30-day avg {format(baseline)}{unit && ` ${unit}`}</div>
+    <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-1.5 mb-2.5">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold truncate">{name}</div>
+          <div className="text-slate-400 text-[9.5px] mt-0.5 font-mono">avg {format(baseline)}{unit && ` ${unit}`}</div>
         </div>
-        <span className={`inline-flex items-center gap-1 rounded-full ring-1 px-2 py-0.5 text-[10px] font-medium ${theme.pillBg}`}>
-          <TrendArrow dir={arrowDir} className="w-2.5 h-2.5" />
+        <span className={`inline-flex items-center gap-0.5 rounded-full ring-1 px-1.5 py-0.5 text-[9.5px] font-medium shrink-0 ${theme.pillBg}`}>
+          <TrendArrow dir={arrowDir} className="w-2 h-2" />
           {deltaSign}{delta.toFixed(1)}%
         </span>
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className={`text-3xl font-semibold tabular-nums tracking-tight ${theme.valueText}`}>{format(value)}</span>
-        <span className="text-slate-500 text-xs font-medium">{unit}</span>
+      <div className="flex items-baseline gap-1">
+        <span className={`text-2xl font-semibold tabular-nums tracking-tight ${theme.valueText}`}>{format(value)}</span>
+        <span className="text-slate-500 text-[10px] font-medium">{unit}</span>
       </div>
       <MiniBar value={value} baseline={baseline} max={max} status={status} />
-      <div className="flex items-center gap-1.5 mt-3">
-        <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
-        <span className="text-[11px] text-slate-400">{theme.label}</span>
+      <div className="flex items-center gap-1 mt-2.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} />
+        <span className="text-[10px] text-slate-400 truncate">{theme.label}</span>
       </div>
     </div>
   )
@@ -126,9 +126,9 @@ function Skeleton() {
         <div className="h-3.5 w-32 bg-slate-800 rounded" />
         <div className="h-2.5 w-24 bg-slate-800 rounded" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-4 sm:p-5">
+          <div key={i} className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800 p-3">
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="space-y-1.5">
                 <div className="h-2.5 w-16 bg-slate-800 rounded" />
@@ -164,7 +164,7 @@ export default function RecoveryMetrics({ data, loading }) {
 
       {hasAny ? (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {CARDS.map(c => (
               <RecoveryCard
                 key={c.name}
