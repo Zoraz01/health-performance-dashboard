@@ -156,7 +156,7 @@ function formatDateLabel(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-export default function SorenessCheckIn({ inline = false, forceOpen = false, onClose, targetDate = null }) {
+export default function SorenessCheckIn({ inline = false, forceOpen = false, onClose, targetDate = null, showBanner = true }) {
   const [submitted, setSubmitted]     = useState(null)
   const [editing, setEditing]         = useState(false)
   const [loading, setLoading]         = useState(true)
@@ -283,7 +283,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
   // Banner mode — hide once checked in (modal still accessible via forceOpen)
   return (
     <>
-      {!loading && !submitted && !targetDate && (
+      {!loading && !submitted && !targetDate && showBanner && (
         <div className="checkin-banner px-5 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <span className="checkin-banner-dot w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" />

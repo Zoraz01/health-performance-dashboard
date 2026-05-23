@@ -87,6 +87,7 @@ export default function App() {
   const [pendingAnalysis, setPendingAnalysis] = useState(null)
   const { isDark, toggle } = useTheme()
   const { logout } = useAuth()
+  const canCheckIn = new Date().getHours() >= 17
   const [snapshotsData,    setSnapshotsData]    = useState(null)
   const [snapshotsLoading, setSnapshotsLoading] = useState(true)
   const [recordData,       setRecordData]       = useState(null)
@@ -239,12 +240,14 @@ export default function App() {
             <span className="text-[13px] font-semibold tracking-tight text-slate-100">FitPulse</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCheckInOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
-            >
-              Check In
-            </button>
+            {canCheckIn && (
+              <button
+                onClick={() => setCheckInOpen(true)}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
+              >
+                Check In
+              </button>
+            )}
             <button
               onClick={e => toggle(e.currentTarget)}
               className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
@@ -298,12 +301,14 @@ export default function App() {
           </div>
           {/* Check-in + Toggle + Logout — right */}
           <div className="flex items-center justify-end gap-2 w-52 shrink-0">
-            <button
-              onClick={() => setCheckInOpen(true)}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
-            >
-              Check In
-            </button>
+            {canCheckIn && (
+              <button
+                onClick={() => setCheckInOpen(true)}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
+              >
+                Check In
+              </button>
+            )}
             <button
               onClick={e => toggle(e.currentTarget)}
               className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
@@ -328,6 +333,7 @@ export default function App() {
         forceOpen={checkInOpen}
         onClose={handleCheckInClose}
         targetDate={checkInDate}
+        showBanner={canCheckIn}
       />
 
       {/* Main layout — centered max-width container */}
