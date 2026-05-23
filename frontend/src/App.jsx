@@ -82,7 +82,9 @@ const TAB_ICON = { Yesterday: CalendarIcon, Trends: TrendsIcon, History: History
 
 export default function App() {
   const [activeTab, setActiveTab]     = useState('Yesterday')
-  const [checkInOpen, setCheckInOpen] = useState(false)
+  const [checkInOpen, setCheckInOpen]       = useState(false)
+  const [checkInDate, setCheckInDate]       = useState(null)
+  const [pendingAnalysis, setPendingAnalysis] = useState(null)
   const { isDark, toggle } = useTheme()
   const { logout } = useAuth()
   const [snapshotsData,    setSnapshotsData]    = useState(null)
@@ -132,6 +134,21 @@ export default function App() {
   }, [fetchCount])
 
   const refreshToday = () => setFetchCount(c => c + 1)
+
+  const openPreCheckIn = (date, runFn) => {
+    setCheckInDate(date)
+    setPendingAnalysis(() => runFn)
+    setCheckInOpen(true)
+  }
+
+  const handleCheckInClose = () => {
+    setCheckInOpen(false)
+    setCheckInDate(null)
+    if (pendingAnalysis) {
+      pendingAnalysis()
+      setPendingAnalysis(null)
+    }
+  }
 
   const snapshot  = snapshotsData?.snapshot           ?? null
   const ySnap     = snapshotsData?.yesterday_snapshot  ?? null
@@ -305,8 +322,13 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Soreness banner + modal */}
-      <SorenessCheckIn forceOpen={checkInOpen} onClose={() => setCheckInOpen(false)} />
+      {/* Soreness banner + modal — key resets component when switching between today/yesterday */}
+      <SorenessCheckIn
+        key={checkInDate || 'today'}
+        forceOpen={checkInOpen}
+        onClose={handleCheckInClose}
+        targetDate={checkInDate}
+      />
 
       {/* Main layout — centered max-width container */}
       <main className="flex-1 flex flex-col lg:flex-row lg:min-h-0 max-w-6xl mx-auto w-full">
@@ -334,7 +356,7 @@ export default function App() {
             {activeTab === 'Yesterday' && (
               <ErrorBoundary>
                 <ActivitySummary data={snapshotsLoading ? undefined : activityData} loading={snapshotsLoading} />
-                <ClaudeCard analysis={recordLoading ? undefined : analysisData} date={analysisDate} onAnalyzed={refreshToday} />
+                <ClaudeCard analysis={recordLoading ? undefined : analysisData} date={analysisDate} onAnalyzed={refreshToday} onPreCheckIn={openPreCheckIn} />
                 <RecoveryMetrics data={(snapshotsLoading || baselinesLoading) ? undefined : recoveryData} loading={snapshotsLoading || baselinesLoading} />
                 <WorkoutLog sessions={snapshotsLoading ? undefined : (displaySnap?.workouts ?? null)} loading={snapshotsLoading} />
                 <RecoveryStatus data={snapshotsLoading ? undefined : (displaySnap?.recovery_status ?? null)} loading={snapshotsLoading} />

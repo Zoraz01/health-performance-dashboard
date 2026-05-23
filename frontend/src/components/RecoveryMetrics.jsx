@@ -92,6 +92,24 @@ const CARDS = [
   { name: 'Walking HR', valueKey: 'walking_hr_avg', baseKey: 'walking_hr_baseline', unit: 'bpm', betterIsHigher: false, max: 140, format: v => Math.round(v) },
 ]
 
+const RHR_SOURCE_LABEL = {
+  ring_official: 'RingConn',
+  ring_computed:  'RingConn (est.)',
+  watch:          'Apple Watch',
+}
+
+function HrvUnavailableCard() {
+  return (
+    <div className="rounded-xl bg-slate-900/40 ring-1 ring-slate-800/60 p-3 sm:p-4 flex flex-col justify-between">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-600 font-semibold">HRV</div>
+      <div className="flex flex-col items-start gap-1 mt-2">
+        <span className="text-slate-600 text-lg font-semibold">—</span>
+        <span className="text-[9.5px] text-slate-600 font-mono leading-tight">Apple Watch required</span>
+      </div>
+    </div>
+  )
+}
+
 function spo2Color(pct) {
   if (pct == null)  return { text: 'text-slate-300', dot: 'bg-slate-500', label: '' }
   if (pct < 90)     return { text: 'text-red-300',   dot: 'bg-red-400',   label: 'Low — seek care' }
@@ -168,18 +186,42 @@ export default function RecoveryMetrics({ data, loading }) {
       {hasAny ? (
         <>
           <div className="grid grid-cols-3 gap-2">
-            {CARDS.map(c => (
-              <RecoveryCard
-                key={c.name}
-                name={c.name}
-                value={data[c.valueKey]}
-                baseline={data[c.baseKey]}
-                unit={c.unit}
-                betterIsHigher={c.betterIsHigher}
-                max={c.max}
-                format={c.format}
-              />
-            ))}
+            {CARDS.map(c => {
+              const value = data[c.valueKey]
+              const baseline = data[c.baseKey]
+              // HRV slot: show unavailable card when Watch isn't worn but ring data is present
+              if (c.valueKey === 'hrv_ms' && value == null && (data.spo2 != null || data.resting_hr != null)) {
+                return <HrvUnavailableCard key={c.name} />
+              }
+              // Resting HR: pass source label as subtitle via name
+              if (c.valueKey === 'resting_hr') {
+                const sourceLabel = RHR_SOURCE_LABEL[data.resting_hr_source]
+                return (
+                  <RecoveryCard
+                    key={c.name}
+                    name={sourceLabel ? `Resting HR · ${sourceLabel}` : c.name}
+                    value={value}
+                    baseline={baseline}
+                    unit={c.unit}
+                    betterIsHigher={c.betterIsHigher}
+                    max={c.max}
+                    format={c.format}
+                  />
+                )
+              }
+              return (
+                <RecoveryCard
+                  key={c.name}
+                  name={c.name}
+                  value={value}
+                  baseline={baseline}
+                  unit={c.unit}
+                  betterIsHigher={c.betterIsHigher}
+                  max={c.max}
+                  format={c.format}
+                />
+              )
+            })}
           </div>
 
           {(data.spo2 != null || data.respiratory_rate != null) && (

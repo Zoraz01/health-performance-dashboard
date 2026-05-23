@@ -530,6 +530,37 @@ def _aggregate_all_blobs_for_date(target_date: str) -> dict | None:
             if val is not None:
                 out["body_weight_kg"] = round(val * 0.453592, 2)
 
+    # Tag resting HR source for display/Claude context.
+    if "resting_hr" in out:
+        rhr_entries = merged.get("resting_heart_rate") or []
+        rhr_today = [e for e in rhr_entries if e.get("date") and _local_date(e["date"]) == target_date]
+        sources = {e.get("source", "") for e in rhr_today}
+        if any("Apple Watch" in s for s in sources):
+            out["resting_hr_source"] = "watch"
+        elif any("RingConn" in s for s in sources):
+            out["resting_hr_source"] = "ring_official"
+    else:
+        # Fallback: estimate from the 5th percentile of overnight RingConn HR (00:00-07:00).
+        # RingConn sends resting_heart_rate sporadically; on days it's absent we compute it
+        # from the continuous HR stream during sleep hours — same method rings use internally.
+        hr_entries = merged.get("heart_rate") or []
+        ring_overnight = sorted(
+            e["Avg"] for e in hr_entries
+            if e.get("source") == "RingConn"
+            and e.get("Avg") is not None
+            and e.get("date")
+            and _local_date(e["date"]) == target_date
+            and 0 <= _parse_dt(e["date"]).hour < 7
+        )
+        if len(ring_overnight) >= 10:
+            p5_idx = max(0, int(len(ring_overnight) * 0.05) - 1)
+            out["resting_hr"] = round(ring_overnight[p5_idx])
+            out["resting_hr_source"] = "ring_computed"
+            log.info(
+                "[apple_health] computed resting HR for %s from %d overnight ring readings: %d bpm (5th pct)",
+                target_date, len(ring_overnight), out["resting_hr"],
+            )
+
     if all_medications:
         out["medications_today"] = json.dumps(all_medications)
 

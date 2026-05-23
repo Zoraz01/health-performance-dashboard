@@ -9,7 +9,10 @@ export function shortDate(iso) {
 
 export function fmtDate(iso) {
   if (!iso) return ''
-  const d = new Date(iso)
+  // Apple Health format "YYYY-MM-DD HH:MM:SS ±HHMM" has spaces; normalize to ISO 8601
+  const normalized = iso.replace(' ', 'T').replace(' ', '')
+  const d = new Date(normalized)
+  if (isNaN(d)) return ''
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 

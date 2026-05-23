@@ -63,36 +63,39 @@ async def log_soreness(request: Request, user: dict = Depends(get_current_user))
 
 
 @router.get("/api/checkin/today")
-async def get_today_checkin(user: dict = Depends(get_current_user)):
+async def get_today_checkin(date: Optional[str] = None, user: dict = Depends(get_current_user)):
     uid      = user["id"]
-    today    = datetime.now(sched.LOCAL_TZ).date().isoformat()
-    soreness = database.get_soreness_for_date(today, user_id=uid)
-    snapshot = database.get_snapshot(today, user_id=uid) or {}
+    target   = date or datetime.now(sched.LOCAL_TZ).date().isoformat()
+    soreness = database.get_soreness_for_date(target, user_id=uid)
+    snapshot = database.get_snapshot(target, user_id=uid) or {}
     note     = (snapshot.get("notes") or "").strip()
     if not soreness and not note:
-        return {"checked_in": False, "date": today}
-    return {"checked_in": True, "date": today, "soreness": soreness, "note": note}
+        return {"checked_in": False, "date": target}
+    return {"checked_in": True, "date": target, "soreness": soreness, "note": note}
 
 
 @router.post("/api/checkin")
 async def submit_checkin(request: Request, user: dict = Depends(get_current_user)):
-    """Accept today's check-in — one submission per day, first wins.
-    Body: { date, soreness: {muscle: 0-5, ...}, note: str }
+    """Accept a check-in submission.
+    Body: { date, soreness: {muscle: 0-5, ...}, note: str, force?: bool }
+    Without force, first submission wins. With force=true, overwrites existing.
     """
     uid      = user["id"]
     body     = await request.json()
     date     = body.get("date")
     soreness = body.get("soreness") or {}
     note     = (body.get("note") or "").strip()
+    force    = bool(body.get("force", False))
 
     if not date:
         raise HTTPException(status_code=400, detail="date is required")
 
-    existing_soreness = database.get_soreness_for_date(date, user_id=uid)
-    existing_snapshot = database.get_snapshot(date, user_id=uid) or {}
-    existing_note     = (existing_snapshot.get("notes") or "").strip()
-    if existing_soreness or existing_note:
-        return {"status": "already_checked_in", "date": date}
+    if not force:
+        existing_soreness = database.get_soreness_for_date(date, user_id=uid)
+        existing_snapshot = database.get_snapshot(date, user_id=uid) or {}
+        existing_note     = (existing_snapshot.get("notes") or "").strip()
+        if existing_soreness or existing_note:
+            return {"status": "already_checked_in", "date": date}
 
     with database.get_sqlite() as conn:
         for muscle, value in soreness.items():
@@ -111,9 +114,8 @@ async def submit_checkin(request: Request, user: dict = Depends(get_current_user
                 (date, muscle, val, uid),
             )
 
-    if note:
-        database.upsert_snapshot_notes(date, note, user_id=uid)
+    database.upsert_snapshot_notes(date, note, user_id=uid)
 
-    log.info("[api/checkin] %s — %d muscle(s), note=%s", date, len(soreness), bool(note))
+    log.info("[api/checkin] %s — %d muscle(s), note=%s, force=%s", date, len(soreness), bool(note), force)
     return {"status": "ok", "date": date,
             "muscles_logged": len(soreness), "note_saved": bool(note)}

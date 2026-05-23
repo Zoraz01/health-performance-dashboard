@@ -50,3 +50,6 @@ backend/logs/
 *.swp
 *.swo
 /.claude
+
+# Designs
+designs/

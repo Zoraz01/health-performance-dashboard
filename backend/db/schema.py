@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 APPLE_HEALTH_COLUMNS = (
     "body_weight_kg", "steps", "active_calories", "basal_calories",
     "exercise_minutes", "stand_hours", "distance_mi", "flights_climbed",
-    "hrv_ms", "resting_hr", "cardio_recovery", "avg_heart_rate",
+    "hrv_ms", "resting_hr", "resting_hr_source", "cardio_recovery", "avg_heart_rate",
     "walking_hr_avg", "sleep_total_min", "sleep_deep_min",
     "sleep_rem_min", "sleep_awake_min", "medications_today",
     "spo2", "respiratory_rate", "caffeine_mg",
@@ -241,6 +241,8 @@ _SQLITE_MIGRATIONS: list[str] = [
     "ALTER TABLE daily_snapshot ADD COLUMN sleep_stages TEXT",
     "ALTER TABLE daily_snapshot ADD COLUMN sleep_source TEXT",
     "ALTER TABLE daily_snapshot ADD COLUMN sleep_hr TEXT",
+    # Resting HR source: 'watch', 'ring_official', 'ring_computed'
+    "ALTER TABLE daily_snapshot ADD COLUMN resting_hr_source TEXT",
 ]
 
 

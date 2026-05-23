@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 
 def get_metric_baselines(days: int = 30, user_id: int | None = None) -> dict:
-    """Return N-day trailing averages for the four recovery metrics."""
+    """Return N-day trailing averages for recovery and activity metrics."""
     uid_clause = " AND user_id = ?" if user_id is not None else ""
     uid_params = (user_id,) if user_id is not None else ()
     with get_sqlite() as conn:
@@ -23,7 +23,9 @@ def get_metric_baselines(days: int = 30, user_id: int | None = None) -> dict:
                 AVG(resting_hr)      AS resting_hr_avg,
                 AVG(cardio_recovery) AS cardio_recovery_avg,
                 AVG(walking_hr_avg)  AS walking_hr_baseline,
-                AVG(spo2)            AS spo2_avg
+                AVG(spo2)            AS spo2_avg,
+                AVG(steps)           AS steps_avg,
+                AVG(active_calories) AS active_calories_avg
             FROM daily_snapshot
             WHERE date >= date('now', ? || ' days')
               AND date < date('now'){uid_clause}

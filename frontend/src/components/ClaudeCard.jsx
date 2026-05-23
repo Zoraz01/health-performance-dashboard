@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import apiFetch from '../apiFetch'
 import { formatDate, prettyKey } from '../lib/formatters'
 import { scoreColor } from '../lib/scoreColors'
@@ -13,7 +13,7 @@ const SCORE_LABELS = {
 
 const SCORE_TIPS = {
   overall:          'Composite score across all four dimensions. A rough daily readiness index.',
-  training_quality: 'Quality of your workout — intensity, volume relative to baseline, and effort consistency across sets.',
+  training_quality: 'Quality of your workout — intensity, volume relative to baseline, and effort consistency across sets. On rest days this score is excluded from the composite; the overall reflects recovery and consistency only.',
   recovery:         'How recovered your body is based on HRV and resting HR vs. your 30-day averages. Low HRV or elevated HR pulls this down.',
   volume_balance:   'How evenly training volume is distributed across muscle groups. Chronic neglect of push/pull or upper/lower balance lowers this.',
   consistency:      'Regularity of training and sleep over the past 7 days. Missing sessions or erratic sleep patterns reduce this score.',
@@ -108,29 +108,102 @@ function ClaudeMark() {
   )
 }
 
-export default function ClaudeCard({ analysis, date, onAnalyzed }) {
+export default function ClaudeCard({ analysis, date, onAnalyzed, onPreCheckIn }) {
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeError, setAnalyzeError] = useState(null)
+  const [localAnalysis, setLocalAnalysis] = useState(null)
+  const pollRef = useRef(null)
+  const deadlineRef = useRef(null)
 
-  const handleAnalyze = async () => {
-    if (!date) return
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  useEffect(() => stopPolling, [stopPolling])
+
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return
+    deadlineRef.current = Date.now() + 5 * 60 * 1000 // 5 min max
+
+    pollRef.current = setInterval(async () => {
+      if (Date.now() > deadlineRef.current) {
+        stopPolling()
+        setAnalyzing(false)
+        setAnalyzeError('Analysis is taking longer than expected — it may still complete. Refresh to check.')
+        return
+      }
+      try {
+        const r = await apiFetch('/api/data/record', { cache: 'no-store' })
+        if (!r.ok) return
+        const data = await r.json()
+        const rec = data.record
+        if (rec?.analysis?.scores?.overall != null) {
+          stopPolling()
+          setLocalAnalysis({
+            ...rec.analysis,
+            date: rec.date,
+            muscle_fatigue: rec.workouts?.muscle_fatigue,
+          })
+          setAnalyzing(false)
+          onAnalyzed?.()
+        }
+      } catch {
+        // network blip — keep polling
+      }
+    }, 3000)
+  }, [stopPolling, onAnalyzed])
+
+  const runAnalysis = async () => {
     setAnalyzing(true)
     setAnalyzeError(null)
     try {
       const r = await apiFetch(`/api/analyze/${date}`, { method: 'POST' })
       if (!r.ok) {
         const body = await r.json().catch(() => ({}))
+        // 5xx / gateway errors — analysis may still run on the backend; poll for it
+        if (r.status >= 500) {
+          startPolling()
+          return
+        }
         throw new Error(body.detail ?? `Server error ${r.status}`)
       }
-      onAnalyzed?.()
-    } catch (e) {
-      setAnalyzeError(e.message)
-    } finally {
-      setAnalyzing(false)
+      const data = await r.json()
+      if (data.analysis) {
+        // Sync path: analysis returned immediately in the response
+        setLocalAnalysis({ ...data.analysis, date: data.date })
+        setAnalyzing(false)
+        onAnalyzed?.()
+      } else {
+        // Async path: backend queued it — poll until it appears
+        startPolling()
+      }
+    } catch {
+      // Network error (Cloudflare dropped, etc.) — analysis may still run; poll
+      startPolling()
     }
   }
 
-  if (!analysis) {
+  const handleAnalyzeClick = async () => {
+    if (!date || analyzing) return
+    try {
+      const r = await apiFetch(`/api/checkin/today?date=${date}`)
+      const data = r.ok ? await r.json() : null
+      if (!data?.checked_in && onPreCheckIn) {
+        onPreCheckIn(date, runAnalysis)
+        return
+      }
+    } catch {
+      // check-in fetch failed — proceed with analysis anyway
+    }
+    runAnalysis()
+  }
+
+  const effectiveAnalysis = localAnalysis || analysis
+
+  if (!effectiveAnalysis || effectiveAnalysis.scores?.overall == null) {
     return (
       <section
         aria-busy="true"
@@ -166,14 +239,14 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
           </p>
           <div className="mt-5 flex flex-col items-center gap-2">
             <button
-              onClick={handleAnalyze}
+              onClick={handleAnalyzeClick}
               disabled={analyzing || !date}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[12px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {analyzing ? (
                 <>
                   <span className="w-3 h-3 rounded-full border-2 border-amber-300/30 border-t-amber-300 animate-spin" />
-                  Analyzing…
+                  {pollRef.current ? 'Waiting for analysis…' : 'Starting…'}
                 </>
               ) : (
                 'Run Analysis Now'
@@ -188,9 +261,9 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
     )
   }
 
-  const s = analysis.scores
+  const s = effectiveAnalysis.scores
   const fatigueOrder = ['fatigued', 'working', 'recovered', 'overtrained']
-  const muscles = Object.entries(analysis.muscle_fatigue || {}).sort(
+  const muscles = Object.entries(effectiveAnalysis.muscle_fatigue || {}).sort(
     (a, b) => fatigueOrder.indexOf(a[1]) - fatigueOrder.indexOf(b[1])
   )
 
@@ -204,14 +277,14 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
               Daily Debrief
             </div>
             <div className="text-slate-200 text-base font-medium">
-              {formatDate(analysis.date || date)}
+              {formatDate(effectiveAnalysis.date || date)}
             </div>
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-500 font-mono">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          {analysis.date && analysis.date !== date
-            ? `for ${formatDate(analysis.date)}`
+          {effectiveAnalysis.date && effectiveAnalysis.date !== date
+            ? `for ${formatDate(effectiveAnalysis.date)}`
             : 'updated nightly'}
         </div>
       </header>
@@ -225,16 +298,16 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
       </div>
 
       <p className="text-[13.5px] leading-relaxed text-slate-300 mb-6">
-        {analysis.summary}
+        {effectiveAnalysis.summary}
       </p>
 
-      {analysis.critique && analysis.critique.length > 0 && (
+      {effectiveAnalysis.critique && effectiveAnalysis.critique.length > 0 && (
         <div className="mb-6">
           <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500 font-semibold mb-3">
             Watch list
           </div>
           <ul className="space-y-2">
-            {analysis.critique.map((c, i) => (
+            {effectiveAnalysis.critique.map((c, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[13px] text-slate-300 leading-relaxed">
                 <WarningIcon className="w-3.5 h-3.5 mt-1 text-amber-400 shrink-0" />
                 <span>{c}</span>
@@ -244,10 +317,10 @@ export default function ClaudeCard({ analysis, date, onAnalyzed }) {
         </div>
       )}
 
-      {analysis.callout && (
+      {effectiveAnalysis.callout && (
         <blockquote className="relative rounded-lg bg-amber-500/6 border-l-2 border-amber-400 pl-4 pr-4 py-3.5 mb-6">
           <p className="text-[14px] leading-relaxed text-slate-100 font-medium">
-            {analysis.callout}
+            {effectiveAnalysis.callout}
           </p>
         </blockquote>
       )}

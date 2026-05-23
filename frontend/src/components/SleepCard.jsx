@@ -3,9 +3,9 @@ import { useMemo } from 'react'
 const VW      = 600
 const LABEL_W = 44
 const CHART_W = VW - LABEL_W
-const ROW_H   = 22
-const MARKER_H = 14
-const AXIS_H  = 18
+const ROW_H   = 40
+const MARKER_H = 18
+const AXIS_H  = 20
 
 const STAGE_ORDER = ['awake', 'rem', 'core', 'deep']
 const STAGE_CFG = {
@@ -87,17 +87,23 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
     return marks
   }, [chartStart, chartEnd])
 
-  const hrLine = useMemo(() => {
-    if (!hrPoints.length) return ''
+  const hrBounds = useMemo(() => {
+    if (!hrPoints.length) return null
     const hrs = hrPoints.map(p => p.hr)
     const hrMin = Math.min(...hrs) - 2
     const hrMax = Math.max(...hrs) + 2
+    return { hrMin, hrMax, hrMid: Math.round((hrMin + hrMax) / 2) }
+  }, [hrPoints])
+
+  const hrLine = useMemo(() => {
+    if (!hrPoints.length || !hrBounds) return ''
+    const { hrMin, hrMax } = hrBounds
     return hrPoints.map(p => {
       const x = toX(new Date(p.t).getTime())
       const y = MARKER_H + ((hrMax - p.hr) / (hrMax - hrMin)) * chartAreaH
       return `${x},${y}`
     }).join(' ')
-  }, [hrPoints, chartStart, totalMs, chartAreaH])
+  }, [hrPoints, hrBounds, chartStart, totalMs, chartAreaH])
 
   if (!segments.length) return null
 
@@ -133,7 +139,7 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
         <text
           key={`lbl-${stage}`}
           x={LABEL_W - 6} y={MARKER_H + i * ROW_H + ROW_H / 2 + 4}
-          textAnchor="end" fontSize="10" fill="#64748b" fontFamily="ui-monospace,monospace"
+          textAnchor="end" fontSize="11" fill="#64748b" fontFamily="ui-monospace,monospace"
         >
           {STAGE_CFG[stage].label}
         </text>
@@ -151,8 +157,8 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
         return (
           <rect
             key={idx}
-            x={x} y={MARKER_H + stageIdx * ROW_H + 2}
-            width={w} height={ROW_H - 4} rx={2}
+            x={x} y={MARKER_H + stageIdx * ROW_H + 3}
+            width={w} height={ROW_H - 6} rx={3}
             fill={STAGE_CFG[seg.stage].fill}
           />
         )
@@ -204,14 +210,46 @@ function Hypnogram({ stages: stagesJson, hr: hrJson }) {
         )
       })}
 
-      {/* HR line overlay */}
-      {hrLine && (
-        <polyline
-          points={hrLine}
-          stroke="#fb923c" strokeWidth={1.5}
-          fill="none" strokeLinejoin="round" opacity={0.9}
-        />
-      )}
+      {/* HR line + scale */}
+      {hrLine && hrBounds && (() => {
+        const { hrMin, hrMax, hrMid } = hrBounds
+        const levels = [
+          { bpm: Math.round(hrMax - 2), y: MARKER_H },
+          { bpm: hrMid,                  y: MARKER_H + chartAreaH / 2 },
+          { bpm: Math.round(hrMin + 2), y: MARKER_H + chartAreaH },
+        ]
+        return (
+          <g>
+            {levels.map(({ bpm, y }) => (
+              <g key={bpm}>
+                <line
+                  x1={LABEL_W} y1={y} x2={VW} y2={y}
+                  stroke="#fb923c" strokeWidth={0.5} strokeDasharray="2,5" opacity={0.18}
+                />
+                <text
+                  x={VW + 4} y={y + 3.5}
+                  textAnchor="start" fontSize="8.5" fill="#fb923c"
+                  opacity={0.75} fontFamily="ui-monospace,monospace"
+                >
+                  {bpm}
+                </text>
+              </g>
+            ))}
+            <text
+              x={VW + 4} y={MARKER_H - 5}
+              textAnchor="start" fontSize="7.5" fill="#fb923c"
+              opacity={0.45} fontFamily="ui-monospace,monospace"
+            >
+              bpm
+            </text>
+            <polyline
+              points={hrLine}
+              stroke="#fb923c" strokeWidth={1.5}
+              fill="none" strokeLinejoin="round" opacity={0.9}
+            />
+          </g>
+        )
+      })()}
     </svg>
   )
 }

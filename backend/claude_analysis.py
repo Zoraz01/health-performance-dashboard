@@ -51,8 +51,9 @@ generic coaching advice.
 - Sport activity: plays basketball, volleyball, and similar court/team sports — tracked via Apple Health as cardio workouts. These count as real training load: cardiovascular stress, lower body explosive demand (quads, calves, glutes), and lateral movement. Factor sport sessions into recovery scoring and training quality accordingly.
 - Data sources: Apple Health (steps, HRV, resting HR, cardio recovery, avg heart rate, \
 body weight, sleep, SpO2, cardio workouts) + Hevy app (resistance training: exercises, \
-sets, reps, load in kg). Apple Watch is the primary sensor; a RingConn ring supplements \
-it and will eventually replace it.
+sets, reps, load in kg). RingConn ring provides resting HR, SpO2, continuous HR, and \
+sleep data. Apple Watch provides HRV and cardio recovery; when only the ring is worn \
+those fields will be absent — treat absent HRV as "unknown", not "good".
 - Goal: Build strength and muscle, improve cardiovascular fitness
 
 ## What you are analyzing
@@ -104,17 +105,33 @@ Do NOT output your calculations — compute all scores internally, then write on
   Clamp the result to the range [1, 10] before rounding.
 
 ### training_quality
-  1–2  No workout logged.
-  3–4  Light incidental activity only (short walk, <15 min casual movement). No structured session.
-  5    Short or low-intensity sport session (<30 min, relaxed pace) or light cardio.
-  6    Moderate sport session (30–60 min basketball, volleyball, etc.) or solid cardio.
-  7    Long or high-intensity sport session (60+ min, competitive pace) OR solid resistance session with normal volume for the split.
-  8–9  Strong resistance session (volume above recent baseline, or high intensity) OR an unusually demanding sport session combined with other activity.
+  Score based on the COMBINATION of structured workouts, step count, and active calories.
+  Use the 30-day Steps Avg and Active Cal Avg from Baselines to anchor your judgment.
+
+  1–2  No workout logged AND steps at or below the 30-day average AND active calories low
+       (genuine sedentary day — nothing meaningful happened).
+  3    No structured session, but above-average steps (>30-day avg) OR active calories
+       meaningfully above average — incidental movement that counts for something.
+  4    No structured session but clearly active day: steps 25–50% above 30-day average OR
+       active calories >400 kcal — intentional movement even without a logged workout.
+  5    No structured session but high activity: steps 50%+ above average OR active calories
+       >550 kcal; OR a short/low-intensity sport session (<30 min, relaxed pace) or light cardio.
+  6    Moderate sport session (30–60 min basketball, volleyball, etc.) or solid cardio. High
+       step counts (>12,000) or active calorie burn on top of a session push toward the upper end.
+  7    Long or high-intensity sport session (60+ min, competitive pace) OR solid resistance
+       session with normal volume for the split. High total steps (>14,000) alongside any
+       session indicate a full active day.
+  8–9  Strong resistance session (volume above recent baseline, or high intensity) OR an
+       unusually demanding sport session combined with other activity. Very high active calorie
+       burn (>700 kcal) or steps well above average (>18,000) support the upper end.
   10   Exceptional. Personal record, elite effort. Rare.
+
   Note: basketball and volleyball are physically demanding — a full-length game or hard \
   session should score 6–7 minimum. Use avg HR and duration from the Apple Health entry \
   to gauge intensity. Resistance sessions: assess based on exercises, sets, reps, and load \
-  in the Workouts section.
+  in the Workouts section. Always compare today's steps and calories against the 30-day \
+  averages in the Baselines section — a high step day relative to baseline is meaningful \
+  even without a logged workout.
 
 ### recovery
   Computed deterministically from % deviation of today's HRV and resting HR versus \
@@ -179,6 +196,9 @@ call out laziness or bad decisions, but also acknowledges when things are actual
 
 ## Rules
 - Every critique point must reference a specific number from the data. No vague statements.
+- Steps and active calories must be cited by number in the summary or at least one critique
+  point whenever they are notably above or below the 30-day baseline. Do not bury them —
+  if the person walked 14,000 steps and burned 600 kcal on a rest day, say so explicitly.
 - If User Notes are present, weight them heavily — the user knows context sensors miss.
 - If sleep data is absent, explicitly note it in the summary and do not assume good sleep.
 - Callout must be one punchy, specific sentence. If the situation calls for it, make it land.
@@ -284,14 +304,28 @@ def _build_prompt(
             rounded = round(val, decimals) if decimals else int(round(val))
             lines.append(f"  {label}: {rounded} {unit}")
 
+    # Explain absent HRV so Claude doesn't treat it as neutral/good.
+    # Ring data present (spo2 or resting_hr) but no HRV = Watch not worn.
+    if snapshot.get("hrv_ms") is None and (
+        snapshot.get("spo2") is not None or snapshot.get("resting_hr") is not None
+    ):
+        lines.append("  HRV: not available (Apple Watch not worn — ring does not export HRV)")
+        lines.append("  NOTE: skip HRV adjustments in the recovery rubric; score recovery from resting HR and SpO2 only.")
+
+    rhr_source = snapshot.get("resting_hr_source")
+    if rhr_source == "ring_computed":
+        lines.append("  NOTE: Resting HR is estimated from overnight ring readings (ring daily summary absent today).")
+
     if baselines:
         lines += ["", "=== 30-day Baselines ==="]
         for key, label, unit in [
-            ("hrv_avg",             "HRV Avg",        "ms"),
-            ("resting_hr_avg",      "Resting HR Avg", "bpm"),
-            ("cardio_recovery_avg", "Cardio Rec Avg", "bpm"),
-            ("walking_hr_baseline", "Walking HR Base","bpm"),
-            ("spo2_avg",            "SpO2 Avg",       "%"),
+            ("hrv_avg",             "HRV Avg",              "ms"),
+            ("resting_hr_avg",      "Resting HR Avg",       "bpm"),
+            ("cardio_recovery_avg", "Cardio Rec Avg",       "bpm"),
+            ("walking_hr_baseline", "Walking HR Base",      "bpm"),
+            ("spo2_avg",            "SpO2 Avg",             "%"),
+            ("steps_avg",           "Steps Avg (30d)",      "steps"),
+            ("active_calories_avg", "Active Cal Avg (30d)", "kcal"),
         ]:
             val = baselines.get(key)
             if val is not None:
