@@ -72,7 +72,7 @@ function NoteField({ value, onChange }) {
 
 function ScaleLegend() {
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono mb-5">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono mb-5">
       {SCALE.map((s, i) => (
         <span key={i} className={levelColor(i)}>{i} — {s}</span>
       ))}
@@ -132,7 +132,7 @@ function CheckedInView({ logged, date, onClose, onEdit, isPast = false }) {
       {onEdit && (
         <button
           onClick={onEdit}
-          className="mt-5 w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold transition-colors"
+          className="mt-5 w-full py-3 min-h-[44px] rounded-xl bg-slate-700 hover:bg-slate-600 active:bg-slate-600 text-slate-200 text-sm font-semibold transition-colors"
         >
           Edit Check-in
         </button>
@@ -141,7 +141,7 @@ function CheckedInView({ logged, date, onClose, onEdit, isPast = false }) {
       {onClose && (
         <button
           onClick={onClose}
-          className="mt-3 w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors"
+          className="mt-3 w-full py-3 min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-700 text-slate-200 text-sm font-semibold transition-colors"
         >
           Done
         </button>
@@ -271,7 +271,7 @@ export default function SorenessCheckIn({ inline = false, forceOpen = false, onC
         )}
         <button
           onClick={handleSubmit}
-          className="mt-6 w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="mt-6 w-full py-3 min-h-[44px] rounded-xl bg-slate-700 hover:bg-slate-600 active:bg-slate-600 text-slate-100 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           disabled={!today || submitting}
         >
           {submitting ? 'Saving…' : editing ? 'Save Changes' : 'Submit Check-in'}

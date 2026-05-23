@@ -243,20 +243,20 @@ export default function App() {
             {canCheckIn && (
               <button
                 onClick={() => setCheckInOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[11px] font-semibold transition-colors"
+                className="px-3 py-2.5 min-h-[44px] inline-flex items-center rounded-lg bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/30 text-amber-300 text-[11px] font-semibold transition-colors"
               >
                 Check In
               </button>
             )}
             <button
               onClick={e => toggle(e.currentTarget)}
-              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
+              className="w-11 h-11 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-slate-200 active:text-slate-200 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
             >
               {isDark ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
             </button>
             <button
               onClick={logout}
-              className="w-8 h-8 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-red-400 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
+              className="w-11 h-11 rounded-lg bg-slate-900 ring-1 ring-slate-800 grid place-items-center text-slate-400 hover:text-red-400 active:text-red-400 transition-colors shadow-[inset_0_1px_0_rgb(255_255_255/0.05),0_1px_4px_rgb(0_0_0/0.4)]"
               title="Sign out"
             >
               <LogoutIcon className="w-4 h-4" />
@@ -409,7 +409,7 @@ export default function App() {
                 {active && (
                   <span className="absolute top-0 left-1/4 right-1/4 h-0.5 rounded-b-full bg-amber-400" />
                 )}
-                <Icon className="w-5 h-5" />
+                <Icon className="w-6 h-6" />
                 <span className={`text-[10px] leading-none tracking-wide ${active ? 'font-bold' : 'font-medium'}`}>
                   {tab}
                 </span>

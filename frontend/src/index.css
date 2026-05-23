@@ -153,8 +153,8 @@ body {
 .soreness-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: rgb(var(--w-400));
   border: 2px solid rgb(var(--s-950));
@@ -162,8 +162,8 @@ body {
   box-shadow: 0 0 0 1px rgb(var(--w-400)), 0 4px 12px rgb(var(--w-400) / 0.35);
 }
 .soreness-slider::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: rgb(var(--w-400));
   border: 2px solid rgb(var(--s-950));

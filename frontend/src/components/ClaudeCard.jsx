@@ -54,7 +54,7 @@ function ScoreBar({ label, score, tip, wide }) {
               onMouseLeave={() => setOpen(false)}
               onFocus={() => setOpen(true)}
               onBlur={() => setOpen(false)}
-              className="text-slate-600 hover:text-slate-400 transition-colors shrink-0"
+              className="text-slate-600 hover:text-slate-400 transition-colors shrink-0 p-3 -m-3"
               tabIndex={0}
               aria-label={`What is ${label}?`}
             >
