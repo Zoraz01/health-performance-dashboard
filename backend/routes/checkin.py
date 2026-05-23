@@ -84,7 +84,7 @@ async def submit_checkin(request: Request, user: dict = Depends(get_current_user
     body     = await request.json()
     date     = body.get("date")
     soreness = body.get("soreness") or {}
-    note     = (body.get("note") or "").strip()
+    note     = (body.get("note") or "").strip()[:500]
     force    = bool(body.get("force", False))
 
     if not date:
